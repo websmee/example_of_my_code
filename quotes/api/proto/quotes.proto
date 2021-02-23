@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = ".;proto";
+
+service Quotes {
+  rpc GetCandlesticks (GetCandlesticksRequest) returns (GetCandlesticksReply) {}
+}
+
+message GetCandlesticksRequest {
+  string symbol = 1;
+  string interval = 2;
+  string from = 3;
+  string to = 4;
+}
+
+message GetCandlesticksReply {
+  map<int64, Candlestick> candlesticks = 1;
+  string err = 2;
+}
+
+message Candlestick {
+  float open = 1;
+  float low = 2;
+  float high = 3;
+  float close = 4;
+  float adj_close = 5;
+  int64 volume = 6;
+  int64 timestamp = 7;
+  string interval = 8;
+  int64 quote_id = 9;
+}

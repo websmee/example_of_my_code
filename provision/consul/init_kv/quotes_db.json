@@ -1,0 +1,7 @@
+{
+  "host": "quotes-db",
+  "port": "5432",
+  "name": "quotes",
+  "user": "quotes",
+  "password": "quotes"
+}

@@ -1,0 +1,122 @@
+version: '3'
+
+services:
+  quotes-app:
+    build: quotes
+    entrypoint: go run main.go
+    command: [
+      --grpc.port=8083,
+      --consul.addr=consul,
+      --consul.service_addr=quotes-app,
+      --consul.service_port=8083,
+      --debug.port=8081,
+      --zipkin-url=http://zipkin:9411/api/v2/spans,
+      --zipkin-ot-bridge=true,
+    ]
+    environment:
+      GO111MODULE: "on"
+    volumes:
+      - ./quotes:/go/src/app
+    ports:
+      - "8081:8081"
+      - "8083:8083"
+    depends_on:
+      - quotes-db
+      - consul
+      - zipkin
+    links:
+      - quotes-db
+      - consul
+      - zipkin
+  quotes-db:
+    image: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: "quotes"
+      POSTGRES_PASSWORD: "quotes"
+    volumes:
+      - postgres-volume
+  consul:
+    build: provision/consul
+    ports:
+      - "8500:8500"
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - ./provision/prometheus/config:/etc/prometheus/
+      - ./provision/prometheus/data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    expose:
+      - 9090
+    ports:
+      - 9090:9090
+    links:
+      - quotes-app
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    links:
+      - prometheus
+      - zipkin
+    ports:
+      - 3000:3000
+    volumes:
+      - ./provision/grafana/data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=MYPASSWORT
+#      - GF_USERS_ALLOW_SIGN_UP=false
+#      - GF_SERVER_DOMAIN=myrul.com
+#      - GF_SMTP_ENABLED=true
+#      - GF_SMTP_HOST=smtp.gmail.com:587
+#      - GF_SMTP_USER=myadrress@gmail.com
+#      - GF_SMTP_PASSWORD=mypassword
+#      - GF_SMTP_FROM_ADDRESS=myaddress@gmail.com
+  zipkin-storage:
+    image: openzipkin/zipkin-mysql
+    ports:
+      - 3306:3306
+  zipkin:
+    image: openzipkin/zipkin
+    # Environment settings are defined here https://github.com/openzipkin/zipkin/blob/master/zipkin-server/README.md#environment-variables
+    environment:
+      - STORAGE_TYPE=mysql
+      - MYSQL_HOST=zipkin-storage
+      - MYSQL_USER=zipkin
+      - MYSQL_PASS=zipkin
+      # Uncomment to enable scribe
+      # - SCRIBE_ENABLED=true
+      # Uncomment to enable self-tracing
+      # - SELF_TRACING_ENABLED=true
+      # Uncomment to enable debug logging
+      # - JAVA_OPTS=-Dlogging.level.zipkin2=DEBUG
+    ports:
+      # Port used for the Zipkin UI and HTTP Api
+      - 9411:9411
+      # Uncomment if you set SCRIBE_ENABLED=true
+      # - 9410:9410
+    depends_on:
+      - zipkin-storage
+
+  # For more details, see https://github.com/openzipkin/docker-zipkin-dependencies
+  zipkin-dependencies:
+    image: openzipkin/zipkin-dependencies
+    entrypoint: crond -f
+    environment:
+      - STORAGE_TYPE=mysql
+      - MYSQL_HOST=zipkin-storage
+      - MYSQL_USER=zipkin
+      - MYSQL_PASS=zipkin
+      # Uncomment to see dependency processing logs
+      # - ZIPKIN_LOG_LEVEL=DEBUG
+      # Uncomment to adjust memory used by the dependencies job
+      # - JAVA_OPTS=-verbose:gc -Xms1G -Xmx1G
+    depends_on:
+      - zipkin-storage
+
+volumes:
+  postgres-volume:
+    external: true
