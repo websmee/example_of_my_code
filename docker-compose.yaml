@@ -3,8 +3,8 @@ version: '3'
 services:
   quotes-app:
     build: quotes
-    entrypoint: go run main.go
     command: [
+      /go/bin/app,
       --grpc.port=8083,
       --consul.addr=consul,
       --consul.service_addr=quotes-app,
@@ -12,6 +12,7 @@ services:
       --debug.port=8081,
       --zipkin-url=http://zipkin:9411/api/v2/spans,
       --zipkin-ot-bridge=true,
+      --db-migrations-path=/go/src/app/infrastructure/persistence/migrations/,
     ]
     environment:
       GO111MODULE: "on"
@@ -36,7 +37,7 @@ services:
       POSTGRES_USER: "quotes"
       POSTGRES_PASSWORD: "quotes"
     volumes:
-      - postgres-volume
+      - postgres-volume:/var/lib/postgresql/data
   consul:
     build: provision/consul
     ports:

@@ -7,6 +7,7 @@ import (
 	"github.com/go-kit/kit/metrics"
 
 	"github.com/websmee/example_of_my_code/quotes/domain/candlestick"
+	"github.com/websmee/example_of_my_code/quotes/domain/quote"
 )
 
 type Middleware func(service QuotesApp) QuotesApp
@@ -20,6 +21,13 @@ func LoggingMiddleware(logger log.Logger) Middleware {
 type loggingMiddleware struct {
 	logger log.Logger
 	next   QuotesApp
+}
+
+func (mw loggingMiddleware) GetQuotes() (quotes []quote.Quote, err error) {
+	defer func() {
+		_ = mw.logger.Log("method", "GetQuotes", "error", err)
+	}()
+	return mw.next.GetQuotes()
 }
 
 func (mw loggingMiddleware) GetCandlesticks(symbol string, interval candlestick.Interval, from, to time.Time) (candlesticks []candlestick.Candlestick, err error) {
@@ -45,6 +53,12 @@ func InstrumentingMiddleware(counter metrics.Counter) Middleware {
 type instrumentingMiddleware struct {
 	counter metrics.Counter
 	next    QuotesApp
+}
+
+func (mw instrumentingMiddleware) GetQuotes() ([]quote.Quote, error) {
+	v, err := mw.next.GetQuotes()
+	mw.counter.Add(float64(len(v)))
+	return v, err
 }
 
 func (mw instrumentingMiddleware) GetCandlesticks(symbol string, interval candlestick.Interval, from, to time.Time) ([]candlestick.Candlestick, error) {

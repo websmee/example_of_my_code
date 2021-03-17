@@ -1,6 +1,15 @@
 package quote
 
 type Quote struct {
-	Id     int64
+	ID     int64
 	Symbol string
+	Name   string
+	Status Status
 }
+
+type Status string
+
+const (
+	StatusNew   Status = "new"
+	StatusReady Status = "ready"
+)

@@ -1,16 +1,9 @@
-package signal
+package params
 
 import (
 	"github.com/shopspring/decimal"
 )
 
-type ParamsModifier interface {
-	Modify(modifying []decimal.Decimal) (stop bool)
-	GetCurrentStep() int
-	GetTotalSteps() int
-}
-
-// todo: need something like gradient descend
 type bruteForceModifier struct {
 	step         int
 	started      bool
@@ -20,7 +13,7 @@ type bruteForceModifier struct {
 	max          []decimal.Decimal
 }
 
-func NewBruteForceParamsModifier(min, max []decimal.Decimal, rate decimal.Decimal) ParamsModifier {
+func NewBruteForceParamsModifier(min, max []decimal.Decimal, rate decimal.Decimal) Modifier {
 	return &bruteForceModifier{
 		step:         0,
 		started:      false,
@@ -39,25 +32,27 @@ func (r *bruteForceModifier) Modify(modifying []decimal.Decimal) (modified bool)
 		return true
 	}
 
+	r.current()
+
 	for modifying[r.currentParam].GreaterThanOrEqual(r.max[r.currentParam]) {
 		if r.currentParam == 0 {
 			r.started = false
 			return false
 		}
-		r.currentParam--
+		r.prev()
 	}
 
 	for r.currentParam < len(modifying)-1 &&
 		modifying[r.currentParam+1].Equals(r.min[r.currentParam+1]) &&
 		!modifying[r.currentParam+1].Equals(r.max[r.currentParam+1]) {
-		r.currentParam++
+		r.next()
 	}
 
 	r.step++
 	modifying[r.currentParam] = modifying[r.currentParam].Add(r.getRate())
 	r.reset(modifying, r.currentParam+1)
 	if r.currentParam < len(modifying)-1 {
-		r.currentParam++
+		r.next()
 	}
 
 	return true
@@ -86,4 +81,37 @@ func (r *bruteForceModifier) reset(modifying []decimal.Decimal, offset int) {
 
 func (r *bruteForceModifier) getRate() decimal.Decimal {
 	return r.max[r.currentParam].Sub(r.min[r.currentParam]).Mul(r.rate)
+}
+
+func (r *bruteForceModifier) current() {
+	for r.min[r.currentParam].Equals(r.max[r.currentParam]) {
+		r.currentParam++
+		if r.currentParam == len(r.min) {
+			r.currentParam = 0
+			break
+		}
+	}
+}
+
+func (r *bruteForceModifier) next() {
+	start := r.currentParam
+	r.currentParam++
+	for r.min[r.currentParam].Equals(r.max[r.currentParam]) {
+		r.currentParam++
+		if r.currentParam == len(r.min) {
+			r.currentParam = start
+			break
+		}
+	}
+}
+
+func (r *bruteForceModifier) prev() {
+	r.currentParam--
+	for r.min[r.currentParam].Equals(r.max[r.currentParam]) {
+		r.currentParam--
+		if r.currentParam < 0 {
+			r.currentParam = 0
+			break
+		}
+	}
 }

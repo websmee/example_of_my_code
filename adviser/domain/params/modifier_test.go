@@ -1,8 +1,9 @@
-package signal
+package params
 
 import (
-	"github.com/shopspring/decimal"
 	"testing"
+
+	"github.com/shopspring/decimal"
 )
 
 func TestBruteForceModifier_Modify(t *testing.T) {

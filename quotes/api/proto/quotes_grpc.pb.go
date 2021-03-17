@@ -12,12 +12,14 @@ import (
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
+// Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
 // QuotesClient is the client API for Quotes service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type QuotesClient interface {
+	GetQuotes(ctx context.Context, in *GetQuotesRequest, opts ...grpc.CallOption) (*GetQuotesReply, error)
 	GetCandlesticks(ctx context.Context, in *GetCandlesticksRequest, opts ...grpc.CallOption) (*GetCandlesticksReply, error)
 }
 
@@ -27,6 +29,15 @@ type quotesClient struct {
 
 func NewQuotesClient(cc grpc.ClientConnInterface) QuotesClient {
 	return &quotesClient{cc}
+}
+
+func (c *quotesClient) GetQuotes(ctx context.Context, in *GetQuotesRequest, opts ...grpc.CallOption) (*GetQuotesReply, error) {
+	out := new(GetQuotesReply)
+	err := c.cc.Invoke(ctx, "/proto.Quotes/GetQuotes", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *quotesClient) GetCandlesticks(ctx context.Context, in *GetCandlesticksRequest, opts ...grpc.CallOption) (*GetCandlesticksReply, error) {
@@ -42,6 +53,7 @@ func (c *quotesClient) GetCandlesticks(ctx context.Context, in *GetCandlesticksR
 // All implementations must embed UnimplementedQuotesServer
 // for forward compatibility
 type QuotesServer interface {
+	GetQuotes(context.Context, *GetQuotesRequest) (*GetQuotesReply, error)
 	GetCandlesticks(context.Context, *GetCandlesticksRequest) (*GetCandlesticksReply, error)
 	mustEmbedUnimplementedQuotesServer()
 }
@@ -50,6 +62,9 @@ type QuotesServer interface {
 type UnimplementedQuotesServer struct {
 }
 
+func (UnimplementedQuotesServer) GetQuotes(context.Context, *GetQuotesRequest) (*GetQuotesReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetQuotes not implemented")
+}
 func (UnimplementedQuotesServer) GetCandlesticks(context.Context, *GetCandlesticksRequest) (*GetCandlesticksReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCandlesticks not implemented")
 }
@@ -63,7 +78,25 @@ type UnsafeQuotesServer interface {
 }
 
 func RegisterQuotesServer(s grpc.ServiceRegistrar, srv QuotesServer) {
-	s.RegisterService(&_Quotes_serviceDesc, srv)
+	s.RegisterService(&Quotes_ServiceDesc, srv)
+}
+
+func _Quotes_GetQuotes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetQuotesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QuotesServer).GetQuotes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Quotes/GetQuotes",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QuotesServer).GetQuotes(ctx, req.(*GetQuotesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Quotes_GetCandlesticks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -84,15 +117,22 @@ func _Quotes_GetCandlesticks_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-var _Quotes_serviceDesc = grpc.ServiceDesc{
+// Quotes_ServiceDesc is the grpc.ServiceDesc for Quotes service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Quotes_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "proto.Quotes",
 	HandlerType: (*QuotesServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetQuotes",
+			Handler:    _Quotes_GetQuotes_Handler,
+		},
 		{
 			MethodName: "GetCandlesticks",
 			Handler:    _Quotes_GetCandlesticks_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "quotes.proto",
+	Metadata: "proto/quotes.proto",
 }

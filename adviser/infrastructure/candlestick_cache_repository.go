@@ -6,39 +6,52 @@ import (
 	"time"
 
 	"github.com/websmee/example_of_my_code/adviser/domain/candlestick"
+	"github.com/websmee/example_of_my_code/adviser/domain/quote"
 )
 
 type candlestickCacheRepository struct {
-	repository candlestick.Repository
-	cache      map[string]map[candlestick.Interval][]candlestick.Candlestick
-	lock       sync.RWMutex
+	quoteRepository       quote.Repository
+	candlestickRepository candlestick.Repository
+	cache                 map[string]map[candlestick.Interval][]candlestick.Candlestick
+	lock                  sync.RWMutex
 }
 
 func NewCandlestickCacheRepository(
 	ctx context.Context,
-	repository candlestick.Repository,
-	symbols []string,
+	quoteRepository quote.Repository,
+	candlestickRepository candlestick.Repository,
 	intervals []candlestick.Interval,
 	from, to time.Time,
 ) (candlestick.Repository, error) {
 	cr := &candlestickCacheRepository{
-		repository: repository,
+		quoteRepository:       quoteRepository,
+		candlestickRepository: candlestickRepository,
 	}
-	if err := cr.makeCache(ctx, symbols, intervals, from, to); err != nil {
+	if err := cr.makeCache(ctx, intervals, from, to); err != nil {
 		return nil, err
 	}
 	return cr, nil
 }
 
-func (r *candlestickCacheRepository) makeCache(ctx context.Context, symbols []string, intervals []candlestick.Interval, from, to time.Time) error {
+func (r *candlestickCacheRepository) makeCache(ctx context.Context, intervals []candlestick.Interval, from, to time.Time) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+
+	quotes, err := r.quoteRepository.GetQuotes(ctx)
+	if err != nil {
+		return err
+	}
+
+	symbols := make([]string, len(quotes))
+	for i := range quotes {
+		symbols[i] = quotes[i].Symbol
+	}
 
 	r.cache = make(map[string]map[candlestick.Interval][]candlestick.Candlestick)
 	for i := range symbols {
 		r.cache[symbols[i]] = make(map[candlestick.Interval][]candlestick.Candlestick)
 		for j := range intervals {
-			cs, err := r.repository.GetCandlesticks(ctx, symbols[i], intervals[j], from, to)
+			cs, err := r.candlestickRepository.GetCandlesticks(ctx, symbols[i], intervals[j], from, to)
 			if err != nil {
 				return err
 			}

@@ -6,7 +6,6 @@ require (
 	github.com/go-kit/kit v0.10.0
 	github.com/go-pg/migrations/v7 v7.1.11
 	github.com/go-pg/pg/v9 v9.1.6
-	github.com/golang/protobuf v1.4.3
 	github.com/oklog/oklog v0.3.2
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/openzipkin-contrib/zipkin-go-opentracing v0.4.5
@@ -15,7 +14,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.3.0
 	github.com/shopspring/decimal v1.2.0
-	github.com/websmee/ms v0.0.0-20210124201802-eb4e2f302dff
+	github.com/websmee/ms v0.0.0-20210307191836-63e0d524c105
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
 	golang.org/x/sys v0.0.0-20210105210732-16f7687f5001 // indirect
 	golang.org/x/text v0.3.4 // indirect

@@ -8,9 +8,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"text/tabwriter"
 
 	"github.com/go-pg/pg/v9"
+	"github.com/websmee/ms/pkg/cmd"
+	"github.com/websmee/ms/pkg/errors"
+
+	"github.com/websmee/example_of_my_code/quotes/cmd/dependencies"
 
 	"github.com/websmee/ms/pkg/discovery"
 	"github.com/websmee/ms/pkg/discovery/health"
@@ -22,9 +25,7 @@ import (
 	kitgrpc "github.com/go-kit/kit/transport/grpc"
 	"github.com/oklog/oklog/pkg/group"
 	stdopentracing "github.com/opentracing/opentracing-go"
-	zipkinot "github.com/openzipkin-contrib/zipkin-go-opentracing"
 	"github.com/openzipkin/zipkin-go"
-	zipkinhttp "github.com/openzipkin/zipkin-go/reporter/http"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
@@ -43,9 +44,6 @@ func main() {
 }
 
 func run() error {
-
-	// CMD INTERFACE
-
 	fs := flag.NewFlagSet("quotes", flag.ExitOnError)
 	var (
 		debugAddr         = fs.String("debug.addr", "0.0.0.0", "Debug and metrics listen address")
@@ -59,52 +57,28 @@ func run() error {
 		consulServicePort = fs.String("consul.service_port", "8082", "consul service port")
 		zipkinURL         = fs.String("zipkin-url", "", "Enable Zipkin tracing via HTTP reporter URL e.g. http://localhost:9411/api/v2/spans")
 		zipkinBridge      = fs.Bool("zipkin-ot-bridge", false, "Use Zipkin OpenTracing bridge instead of native implementation")
+		dbMigrationsPath  = fs.String("db-migrations-path", "infrastructure/persistence/migrations/", "Where to find migrations")
 	)
-	fs.Usage = usageFor(fs, os.Args[0]+" [flags]")
+	fs.Usage = cmd.UsageFor(fs, os.Args[0]+" [flags]")
 	_ = fs.Parse(os.Args[1:])
 
-	// LOGGER
+	// DEPENDENCIES
 
-	var logger log.Logger
+	var (
+		err          error
+		logger       log.Logger
+		zipkinTracer *zipkin.Tracer
+		tracer       stdopentracing.Tracer
+		onclose      func()
+	)
 	{
-		logger = log.NewLogfmtLogger(os.Stderr)
-		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-		logger = log.With(logger, "caller", log.DefaultCaller)
-	}
-
-	// TRACER
-
-	var zipkinTracer *zipkin.Tracer
-	{
-		if *zipkinURL != "" {
-			var (
-				err         error
-				hostPort    = "localhost:80"
-				serviceName = "quotes"
-				reporter    = zipkinhttp.NewReporter(*zipkinURL)
-			)
-			defer reporter.Close()
-			zEP, _ := zipkin.NewEndpoint(serviceName, hostPort)
-			zipkinTracer, err = zipkin.NewTracer(reporter, zipkin.WithLocalEndpoint(zEP))
-			if err != nil {
-				_ = logger.Log("tracer", "Zipkin", "error", fmt.Sprintf("%+v", err))
-				return err
-			}
-			if !(*zipkinBridge) {
-				_ = logger.Log("tracer", "Zipkin", "type", "Native", "URL", *zipkinURL)
-			}
+		logger = dependencies.GetLogger()
+		zipkinTracer, tracer, onclose, err = dependencies.GetTracers(*zipkinURL, *zipkinBridge)
+		if err != nil {
+			_ = logger.Log("dependencies", "tracer", "error", err, "stack", errors.GetStackTrace(err))
+			return err
 		}
-	}
-
-	var tracer stdopentracing.Tracer
-	{
-		if *zipkinBridge && zipkinTracer != nil {
-			_ = logger.Log("tracer", "Zipkin", "type", "OpenTracing", "URL", *zipkinURL)
-			tracer = zipkinot.Wrap(zipkinTracer)
-			zipkinTracer = nil
-		} else {
-			tracer = stdopentracing.GlobalTracer() // no-op
-		}
+		defer onclose()
 	}
 
 	// METRICS
@@ -132,32 +106,37 @@ func run() error {
 
 	// CONFIG
 
-	cfg, err := config.NewConsulKVConfig(*consulAddr+":"+*consulPort, logger)
-	if err != nil {
-		_ = logger.Log("config", "connect", "error", fmt.Sprintf("%+v", err))
-		return err
-	}
+	var dbConfig *config.DB
+	{
+		cfg, err := config.NewConsulKVConfig(*consulAddr+":"+*consulPort, logger)
+		if err != nil {
+			_ = logger.Log("config", "connect", "error", err, "stack", errors.GetStackTrace(err))
+			return err
+		}
 
-	dbConfig, err := cfg.GetDb("quotes_db")
-	if err != nil {
-		_ = logger.Log("config", "db", "error", fmt.Sprintf("%+v", err))
-		return err
+		dbConfig, err = cfg.GetDB("quotes_db")
+		if err != nil {
+			_ = logger.Log("config", "db", "error", err, "stack", errors.GetStackTrace(err))
+			return err
+		}
 	}
 
 	// DB
 
-	db := pg.Connect(&pg.Options{
-		Addr:     dbConfig.Host + ":" + dbConfig.Port,
-		User:     dbConfig.User,
-		Password: dbConfig.Password,
-		Database: dbConfig.Name,
-	})
-	defer db.Close()
+	var db *pg.DB
+	{
+		db = pg.Connect(&pg.Options{
+			Addr:     dbConfig.Host + ":" + dbConfig.Port,
+			User:     dbConfig.User,
+			Password: dbConfig.Password,
+			Database: dbConfig.Name,
+		})
+		defer db.Close()
 
-	err = persistence.Migrate(db)
-	if err != nil {
-		_ = logger.Log("db", "migrate", "error", fmt.Sprintf("%+v", err))
-		return err
+		if err := persistence.Migrate(db, *dbMigrationsPath); err != nil {
+			_ = logger.Log("db", "migrate", "error", err, "stack", errors.GetStackTrace(err))
+			return err
+		}
 	}
 
 	// INIT
@@ -190,7 +169,7 @@ func run() error {
 		addr := *debugAddr + ":" + *debugPort
 		debugListener, err := net.Listen("tcp", addr)
 		if err != nil {
-			_ = logger.Log("transport", "debug/HTTP", "during", "Listen", "error", fmt.Sprintf("%+v", err))
+			_ = logger.Log("transport", "debug/HTTP", "during", "Listen", "error", err, "stack", errors.GetStackTrace(err))
 			return err
 		}
 		g.Add(func() error {
@@ -206,13 +185,13 @@ func run() error {
 		addr := *grpcAddr + ":" + *grpcPort
 		grpcListener, err := net.Listen("tcp", addr)
 		if err != nil {
-			_ = logger.Log("transport", "gRPC", "during", "Listen", "error", fmt.Sprintf("%+v", err))
+			_ = logger.Log("transport", "gRPC", "during", "Listen", "error", err, "stack", errors.GetStackTrace(err))
 			return err
 		}
 		g.Add(func() error {
 			// register service in consul
 			if err := serviceRegistrar.Register(*consulServiceName, *consulServiceAddr+":"+*consulServicePort); err != nil {
-				_ = logger.Log("transport", "gRPC", "during", "Register", "error", fmt.Sprintf("%+v", err))
+				_ = logger.Log("transport", "gRPC", "during", "Register", "error", err, "stack", errors.GetStackTrace(err))
 				return err
 			}
 
@@ -246,19 +225,4 @@ func run() error {
 	_ = logger.Log("exit", g.Run())
 
 	return nil
-}
-
-func usageFor(fs *flag.FlagSet, short string) func() {
-	return func() {
-		fmt.Fprintf(os.Stderr, "USAGE\n")
-		fmt.Fprintf(os.Stderr, "  %s\n", short)
-		fmt.Fprintf(os.Stderr, "\n")
-		fmt.Fprintf(os.Stderr, "FLAGS\n")
-		w := tabwriter.NewWriter(os.Stderr, 0, 2, 2, ' ', 0)
-		fs.VisitAll(func(f *flag.Flag) {
-			fmt.Fprintf(w, "\t-%s %s\t%s\n", f.Name, f.DefValue, f.Usage)
-		})
-		w.Flush()
-		fmt.Fprintf(os.Stderr, "\n")
-	}
 }

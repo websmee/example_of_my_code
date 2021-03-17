@@ -2,12 +2,12 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
-	"text/tabwriter"
 
+	"github.com/websmee/ms/pkg/cmd"
+	"github.com/websmee/ms/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/websmee/example_of_my_code/adviser/app"
@@ -31,7 +31,7 @@ func run() error {
 		epochs       = fs.Int("train.epochs", 1000, "number of training epochs")
 		learningRate = fs.Float64("train.rate", 0.01, "learning rate")
 	)
-	fs.Usage = usageFor(fs, os.Args[0]+" [flags]")
+	fs.Usage = cmd.UsageFor(fs, os.Args[0]+" [flags]")
 	_ = fs.Parse(os.Args[1:])
 
 	// DEPENDENCIES
@@ -57,26 +57,11 @@ func run() error {
 	}()
 
 	if err := nnTrainerApp.TrainNN(ctx, *nnName, *datasetName, *epochs, *learningRate); err != nil {
-		_ = logger.Log("run", "nnTrainerApp", "error", fmt.Sprintf("%+v", err))
+		_ = logger.Log("run", "nnTrainerApp", "error", err, "stack", errors.GetStackTrace(err))
 		return err
 	}
 
 	_ = logger.Log("run", "exit")
 
 	return nil
-}
-
-func usageFor(fs *flag.FlagSet, short string) func() {
-	return func() {
-		fmt.Fprintf(os.Stderr, "USAGE\n")
-		fmt.Fprintf(os.Stderr, "  %s\n", short)
-		fmt.Fprintf(os.Stderr, "\n")
-		fmt.Fprintf(os.Stderr, "FLAGS\n")
-		w := tabwriter.NewWriter(os.Stderr, 0, 2, 2, ' ', 0)
-		fs.VisitAll(func(f *flag.Flag) {
-			fmt.Fprintf(w, "\t-%s %s\t%s\n", f.Name, f.DefValue, f.Usage)
-		})
-		w.Flush()
-		fmt.Fprintf(os.Stderr, "\n")
-	}
 }

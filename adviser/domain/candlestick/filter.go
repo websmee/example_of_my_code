@@ -7,11 +7,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-const (
-	tradingStartHour = 1
-	tradingEndHour   = 21
-)
-
 type basicFilter struct {
 	repository Repository
 }
@@ -30,10 +25,6 @@ func (r basicFilter) GetCandlesticks(ctx context.Context, symbol string, interva
 	resultIndex := 0
 	for i := range cs {
 		if cs[i].Close.Equals(decimal.NewFromInt(0)) {
-			continue
-		}
-		if interval == IntervalHour &&
-			(cs[i].Timestamp.Hour() < tradingStartHour || cs[i].Timestamp.Hour() > tradingEndHour) {
 			continue
 		}
 		result[resultIndex] = cs[i]

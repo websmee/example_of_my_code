@@ -11,11 +11,12 @@ import (
 )
 
 type QuotesApp interface {
+	GetQuotes() ([]quote.Quote, error)
 	GetCandlesticks(symbol string, interval candlestick.Interval, from, to time.Time) ([]candlestick.Candlestick, error)
 	HealthCheck() bool
 }
 
-const healthCheckQuoteSymbol = "GC=F"
+const healthCheckQuoteSymbol = "AAPL"
 
 type quotesApp struct {
 	logger          log.Logger
@@ -42,6 +43,10 @@ func NewQuotesApp(
 		svc = InstrumentingMiddleware(counter)(svc)
 	}
 	return svc
+}
+
+func (r *quotesApp) GetQuotes() ([]quote.Quote, error) {
+	return r.quoteRepo.GetQuotes()
 }
 
 func (r *quotesApp) GetCandlesticks(symbol string, interval candlestick.Interval, from, to time.Time) ([]candlestick.Candlestick, error) {

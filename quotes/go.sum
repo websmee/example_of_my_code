@@ -381,8 +381,8 @@ github.com/vmihailenco/msgpack/v4 v4.3.11/go.mod h1:gborTTJjAo/GWTqqRjrLCn9pgNN+
 github.com/vmihailenco/tagparser v0.1.0/go.mod h1:OeAg3pn3UbLjkWt+rN9oFYB6u/cQgqMEUPoW2WPyhdI=
 github.com/vmihailenco/tagparser v0.1.1 h1:quXMXlA39OCbd2wAdTsGDlK9RkOk6Wuw+x37wVyIuWY=
 github.com/vmihailenco/tagparser v0.1.1/go.mod h1:OeAg3pn3UbLjkWt+rN9oFYB6u/cQgqMEUPoW2WPyhdI=
-github.com/websmee/ms v0.0.0-20210124201802-eb4e2f302dff h1:qwzYFLAMDUfRtk073mJhukLscO13mIvAIbC1j/CPJ5E=
-github.com/websmee/ms v0.0.0-20210124201802-eb4e2f302dff/go.mod h1:nfmM9wzCuLhCRBNIVUtchs3WS31G41oSDofyy35YGEg=
+github.com/websmee/ms v0.0.0-20210307191836-63e0d524c105 h1:4E+mkBM26Ap/hm0vkU+GftRWoVqNrFPcP/iVoMUmLQ4=
+github.com/websmee/ms v0.0.0-20210307191836-63e0d524c105/go.mod h1:gbyp9MhrlaxbtC5L0ha+tVvhyy5vJyzFgDLg969Qwy0=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
 go.etcd.io/bbolt v1.3.3/go.mod h1:IbVyRI1SCnLcuJnV2u8VeU0CEYM7e686BmAb1XKL+uU=
 go.etcd.io/etcd v0.0.0-20191023171146-3cf2f69b5738/go.mod h1:dnLIgRNXwCJa5e+c6mIZCrds/GIG4ncV9HhK5PX7jPg=

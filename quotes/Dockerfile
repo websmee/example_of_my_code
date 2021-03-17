@@ -7,6 +7,6 @@ ADD . /go/src/app
 
 RUN GO111MODULE=on go install
 
-CMD /go/bin/quotes_app
+CMD /go/bin/app
 
 EXPOSE 8080 8082

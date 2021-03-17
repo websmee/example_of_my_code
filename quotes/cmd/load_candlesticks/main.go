@@ -4,10 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"text/tabwriter"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-pg/pg/v9"
+	"github.com/websmee/ms/pkg/cmd"
+	"github.com/websmee/ms/pkg/errors"
 
 	"github.com/websmee/example_of_my_code/quotes/app"
 	"github.com/websmee/example_of_my_code/quotes/infrastructure"
@@ -23,15 +24,13 @@ func main() {
 }
 
 func run() error {
-
-	// CMD INTERFACE
-
 	fs := flag.NewFlagSet("quotes", flag.ExitOnError)
 	var (
-		consulAddr = fs.String("consul.addr", "127.0.0.1", "consul address")
-		consulPort = fs.String("consul.port", "8500", "consul port")
+		consulAddr       = fs.String("consul.addr", "127.0.0.1", "consul address")
+		consulPort       = fs.String("consul.port", "8500", "consul port")
+		dbMigrationsPath = fs.String("db-migrations-path", "infrastructure/persistence/migrations/", "Where to find migrations")
 	)
-	fs.Usage = usageFor(fs, os.Args[0]+" [flags]")
+	fs.Usage = cmd.UsageFor(fs, os.Args[0]+" [flags]")
 	_ = fs.Parse(os.Args[1:])
 
 	// LOGGER
@@ -45,38 +44,52 @@ func run() error {
 
 	// CONFIG
 
-	cfg, err := config.NewConsulKVConfig(*consulAddr+":"+*consulPort, logger)
-	if err != nil {
-		_ = logger.Log("config", "connect", "error", fmt.Sprintf("%+v", err))
-		return err
-	}
+	var (
+		dbConfig           *config.DB
+		alphaVantageConfig *config.AlphaVantage
+	)
+	{
+		cfg, err := config.NewConsulKVConfig(*consulAddr+":"+*consulPort, logger)
+		if err != nil {
+			_ = logger.Log("config", "connect", "error", err, "stack", errors.GetStackTrace(err))
+			return err
+		}
 
-	dbConfig, err := cfg.GetDb("quotes_db")
-	if err != nil {
-		_ = logger.Log("config", "db", "error", fmt.Sprintf("%+v", err))
-		return err
+		dbConfig, err = cfg.GetDB("quotes_db")
+		if err != nil {
+			_ = logger.Log("config", "db", "error", err, "stack", errors.GetStackTrace(err))
+			return err
+		}
+
+		alphaVantageConfig, err = cfg.GetAlphaVantage()
+		if err != nil {
+			_ = logger.Log("config", "apikey", "error", err, "stack", errors.GetStackTrace(err))
+			return err
+		}
 	}
 
 	// DB
 
-	db := pg.Connect(&pg.Options{
-		Addr:     dbConfig.Host + ":" + dbConfig.Port,
-		User:     dbConfig.User,
-		Password: dbConfig.Password,
-		Database: dbConfig.Name,
-	})
-	defer db.Close()
+	var db *pg.DB
+	{
+		db = pg.Connect(&pg.Options{
+			Addr:     dbConfig.Host + ":" + dbConfig.Port,
+			User:     dbConfig.User,
+			Password: dbConfig.Password,
+			Database: dbConfig.Name,
+		})
+		defer db.Close()
 
-	err = persistence.Migrate(db)
-	if err != nil {
-		_ = logger.Log("db", "migrate", "error", fmt.Sprintf("%+v", err))
-		return err
+		if err := persistence.Migrate(db, *dbMigrationsPath); err != nil {
+			_ = logger.Log("db", "migrate", "error", err, "stack", errors.GetStackTrace(err))
+			return err
+		}
 	}
 
 	// INIT
 
 	loader := app.NewCandlestickLoader(
-		infrastructure.NewCandlestickYahooLoader(),
+		infrastructure.NewCandlestickAlphaVantageLoader(alphaVantageConfig),
 		persistence.NewCandlestickRepository(db),
 		persistence.NewQuoteRepository(db),
 	)
@@ -84,26 +97,11 @@ func run() error {
 	// RUN
 
 	if err := loader.LoadCandlesticks(); err != nil {
-		_ = logger.Log("run", "nnApp", "error", fmt.Sprintf("%+v", err))
+		_ = logger.Log("run", "nnApp", "error", err, "stack", errors.GetStackTrace(err))
 		return err
 	}
 
 	_ = logger.Log("run", "exit")
 
 	return nil
-}
-
-func usageFor(fs *flag.FlagSet, short string) func() {
-	return func() {
-		fmt.Fprintf(os.Stderr, "USAGE\n")
-		fmt.Fprintf(os.Stderr, "  %s\n", short)
-		fmt.Fprintf(os.Stderr, "\n")
-		fmt.Fprintf(os.Stderr, "FLAGS\n")
-		w := tabwriter.NewWriter(os.Stderr, 0, 2, 2, ' ', 0)
-		fs.VisitAll(func(f *flag.Flag) {
-			fmt.Fprintf(w, "\t-%s %s\t%s\n", f.Name, f.DefValue, f.Usage)
-		})
-		w.Flush()
-		fmt.Fprintf(os.Stderr, "\n")
-	}
 }

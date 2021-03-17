@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	startDate = "2020-01-01T00:00:00Z"
-	endDate   = "2021-02-01T00:00:00Z"
+	startDate = "2018-01-01T00:00:00Z"
+	endDate   = "2021-03-01T00:00:00Z"
 )
 
 type CandlestickLoader interface {
@@ -23,7 +23,7 @@ type candlestickLoader struct {
 	quoteRepo       quote.Repository
 }
 
-func NewCandlestickLoader(loader candlestick.Loader, candlestickRepo candlestick.Repository, quoteRepo quote.Repository) *candlestickLoader {
+func NewCandlestickLoader(loader candlestick.Loader, candlestickRepo candlestick.Repository, quoteRepo quote.Repository) CandlestickLoader {
 	return &candlestickLoader{
 		loader:          loader,
 		candlestickRepo: candlestickRepo,
@@ -31,60 +31,46 @@ func NewCandlestickLoader(loader candlestick.Loader, candlestickRepo candlestick
 	}
 }
 
-func (r *candlestickLoader) LoadCandlesticks() error {
+func (r candlestickLoader) LoadCandlesticks() error {
 	quotes, err := r.quoteRepo.GetQuotes()
 	if err != nil {
 		return err
 	}
 
 	for _, q := range quotes {
-		if err := r.load(&q, startDate, endDate, time.Hour*24, time.Millisecond*100, candlestick.IntervalHour); err != nil {
+		if q.Status != quote.StatusNew {
+			continue
+		}
+		if err := r.load(q, startDate, endDate, candlestick.IntervalHour); err != nil {
 			return err
 		}
-		if err := r.load(&q, startDate, endDate, time.Hour*24*30, time.Millisecond*100, candlestick.IntervalDay); err != nil {
-			return err
-		}
-		if err := r.load(&q, startDate, endDate, time.Hour*24*100, time.Millisecond*100, candlestick.IntervalMonth); err != nil {
-			return err
-		}
+		fmt.Println("READY", q)
 	}
 
 	return nil
 }
 
-func (r *candlestickLoader) load(quote *quote.Quote, startDate string, endDate string, step time.Duration, delay time.Duration, interval candlestick.Interval) error {
+func (r candlestickLoader) load(q quote.Quote, startDate string, endDate string, interval candlestick.Interval) error {
 	start, _ := time.Parse(time.RFC3339, startDate)
 	end, _ := time.Parse(time.RFC3339, endDate)
 	start = start.UTC()
 	end = end.UTC()
 
-	fmt.Printf("loading candlesticks %s\n", interval)
+	cs, err := r.loader.LoadCandlesticks(q, start, end, interval)
+	if err != nil {
+		return err
+	}
 
-	for end.Sub(start) > 0 {
-		stepEnd := start.Add(step)
-		if end.Sub(stepEnd) < 0 {
-			stepEnd = end
-		}
-
-		cs, err := r.loader.LoadCandlesticks(quote, start, stepEnd, interval)
+	for i := range cs {
+		err := r.candlestickRepo.SaveCandlestick(&cs[i])
 		if err != nil {
 			return err
 		}
-
-		for i := range cs {
-			err := r.candlestickRepo.SaveCandlestick(&cs[i])
-			if err != nil {
-				return err
-			}
-		}
-
-		fmt.Printf("candlesticks saved: %d\n", len(cs))
-
-		start = stepEnd
-		time.Sleep(delay)
 	}
 
-	fmt.Printf("loading candlesticks finished\n\n")
+	if err := r.quoteRepo.UpdateQuoteStatus(&q, quote.StatusReady); err != nil {
+		return err
+	}
 
 	return nil
 }

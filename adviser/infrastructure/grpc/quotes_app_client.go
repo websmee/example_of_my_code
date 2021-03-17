@@ -12,20 +12,50 @@ import (
 	grpctransport "github.com/go-kit/kit/transport/grpc"
 	stdopentracing "github.com/opentracing/opentracing-go"
 	stdzipkin "github.com/openzipkin/zipkin-go"
-	"github.com/shopspring/decimal"
 	"github.com/sony/gobreaker"
 	"google.golang.org/grpc"
 
 	"github.com/websmee/example_of_my_code/quotes/api/proto"
 
 	"github.com/websmee/example_of_my_code/adviser/domain/candlestick"
+	"github.com/websmee/example_of_my_code/adviser/domain/quote"
 )
 
-func NewCandlestickGRPCClient(conn *grpc.ClientConn, otTracer stdopentracing.Tracer, zipkinTracer *stdzipkin.Tracer, logger log.Logger) candlestick.Repository {
+type QuotesApp interface {
+	GetQuotes(ctx context.Context) ([]quote.Quote, error)
+	GetCandlesticks(ctx context.Context, symbol string, interval candlestick.Interval, from, to time.Time) ([]candlestick.Candlestick, error)
+}
+
+type quotesAppGRPCClient struct {
+	getQuotesEndpoint       endpoint.Endpoint
+	getCandlesticksEndpoint endpoint.Endpoint
+}
+
+func NewQuotesAppGRPCClient(conn *grpc.ClientConn, otTracer stdopentracing.Tracer, zipkinTracer *stdzipkin.Tracer, logger log.Logger) QuotesApp {
 	// limiter := ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second), 100))
 	var options []grpctransport.ClientOption
 	if zipkinTracer != nil {
 		options = append(options, zipkin.GRPCClientTrace(zipkinTracer))
+	}
+
+	var getQuotesEndpoint endpoint.Endpoint
+	{
+		getQuotesEndpoint = grpctransport.NewClient(
+			conn,
+			"proto.Quotes",
+			"GetQuotes",
+			encodeGRPCGetQuotesRequest,
+			decodeGRPCGetQuotesResponse,
+			proto.GetQuotesReply{},
+			append(options, grpctransport.ClientBefore(opentracing.ContextToGRPC(otTracer, logger)))...,
+		).Endpoint()
+		getQuotesEndpoint = opentracing.TraceClient(otTracer, "GetQuotes")(getQuotesEndpoint)
+		// getQuotesEndpoint = limiter(getQuotesEndpoint)
+		getQuotesEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{
+			Name:    "GetQuotes",
+			Timeout: 30 * time.Second,
+		}))(getQuotesEndpoint)
+		getQuotesEndpoint = LoggingMiddleware(log.With(logger, "method", "GetQuotes"))(getQuotesEndpoint)
 	}
 
 	var getCandlesticksEndpoint endpoint.Endpoint
@@ -48,40 +78,8 @@ func NewCandlestickGRPCClient(conn *grpc.ClientConn, otTracer stdopentracing.Tra
 		getCandlesticksEndpoint = LoggingMiddleware(log.With(logger, "method", "GetCandlesticks"))(getCandlesticksEndpoint)
 	}
 
-	return CandlestickRepository{
-		GetCandlesticksEndpoint: getCandlesticksEndpoint,
+	return &quotesAppGRPCClient{
+		getQuotesEndpoint:       getQuotesEndpoint,
+		getCandlesticksEndpoint: getCandlesticksEndpoint,
 	}
-}
-
-func decodeGRPCGetCandlesticksResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
-	reply := grpcReply.(*proto.GetCandlesticksReply)
-	cs := make([]candlestick.Candlestick, len(reply.Candlesticks))
-	for i := range reply.Candlesticks {
-		cs[i] = candlestick.Candlestick{
-			Open:      decimal.NewFromFloat32(reply.Candlesticks[i].Open),
-			Low:       decimal.NewFromFloat32(reply.Candlesticks[i].Low),
-			High:      decimal.NewFromFloat32(reply.Candlesticks[i].High),
-			Close:     decimal.NewFromFloat32(reply.Candlesticks[i].Close),
-			AdjClose:  decimal.NewFromFloat32(reply.Candlesticks[i].AdjClose),
-			Volume:    int(reply.Candlesticks[i].Volume),
-			Timestamp: time.Unix(reply.Candlesticks[i].Timestamp, 0),
-			Interval:  candlestick.Interval(reply.Candlesticks[i].Interval),
-			QuoteId:   reply.Candlesticks[i].QuoteId,
-		}
-	}
-
-	return GetCandlesticksResponse{
-		Candlesticks: cs,
-		Err:          nil,
-	}, nil
-}
-
-func encodeGRPCGetCandlesticksRequest(_ context.Context, request interface{}) (interface{}, error) {
-	req := request.(GetCandlesticksRequest)
-	return &proto.GetCandlesticksRequest{
-		Symbol:   req.Symbol,
-		Interval: string(req.Interval),
-		From:     req.From.Format(time.RFC3339),
-		To:       req.To.Format(time.RFC3339),
-	}, nil
 }

@@ -19,6 +19,7 @@ const (
 type Calculator interface {
 	CalculateSMA(candlesticks []Candlestick) decimal.Decimal
 	CalculateVolatility(candlesticks []Candlestick) decimal.Decimal
+	CalculateRelativeVolatility(candlesticks []Candlestick) decimal.Decimal
 	CalculateVolume(candlesticks []Candlestick) decimal.Decimal
 	CalculateOrderResult(
 		currentPrice decimal.Decimal,
@@ -76,6 +77,10 @@ func (r calculator) CalculateOrderResult(
 }
 
 func (r calculator) CalculateVolatility(candlesticks []Candlestick) decimal.Decimal {
+	if len(candlesticks) == 0 {
+		return decimal.NewFromInt(0)
+	}
+
 	count := decimal.NewFromInt(int64(len(candlesticks)))
 	avgClosePrice := r.CalculateSMA(candlesticks)
 	squareDivsSum := decimal.NewFromInt(0)
@@ -90,7 +95,19 @@ func (r calculator) CalculateVolatility(candlesticks []Candlestick) decimal.Deci
 	return decimal.NewFromFloat(math.Pow(f, 0.5))
 }
 
+func (r calculator) CalculateRelativeVolatility(candlesticks []Candlestick) decimal.Decimal {
+	if len(candlesticks) == 0 {
+		return decimal.NewFromInt(0)
+	}
+
+	return r.CalculateVolatility(candlesticks).Div(r.CalculateSMA(candlesticks)).Mul(decimal.NewFromInt(100))
+}
+
 func (r calculator) CalculateSMA(candlesticks []Candlestick) decimal.Decimal {
+	if len(candlesticks) == 0 {
+		return decimal.NewFromInt(0)
+	}
+
 	count := decimal.NewFromInt(int64(len(candlesticks)))
 	closePricesSum := decimal.NewFromInt(0)
 	for i := range candlesticks {

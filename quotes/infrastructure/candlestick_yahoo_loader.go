@@ -12,14 +12,14 @@ import (
 	"github.com/websmee/example_of_my_code/quotes/domain/quote"
 )
 
-type candlestickLoader struct {
+type candlestickYahooLoader struct {
 }
 
-func NewCandlestickYahooLoader() *candlestickLoader {
-	return &candlestickLoader{}
+func NewCandlestickYahooLoader() candlestick.Loader {
+	return &candlestickYahooLoader{}
 }
 
-func (r *candlestickLoader) LoadCandlesticks(quote *quote.Quote, start time.Time, end time.Time, interval candlestick.Interval) ([]candlestick.Candlestick, error) {
+func (r *candlestickYahooLoader) LoadCandlesticks(quote quote.Quote, start time.Time, end time.Time, interval candlestick.Interval) ([]candlestick.Candlestick, error) {
 	params := &chart.Params{
 		Symbol:   quote.Symbol,
 		Start:    datetime.New(&start),
@@ -31,7 +31,7 @@ func (r *candlestickLoader) LoadCandlesticks(quote *quote.Quote, start time.Time
 	var cs []candlestick.Candlestick
 	for iter.Next() {
 		c := chartBarToCandlestick(iter.Bar())
-		c.QuoteId = quote.Id
+		c.QuoteID = quote.ID
 		c.Interval = interval
 		cs = append(cs, c)
 	}

@@ -380,9 +380,14 @@ github.com/vmihailenco/msgpack/v4 v4.3.7/go.mod h1:Ii+PksJlvFT5ZRcB/4YLAInMIp6a0
 github.com/vmihailenco/msgpack/v4 v4.3.11/go.mod h1:gborTTJjAo/GWTqqRjrLCn9pgNN+NXzzngzBKDPIqw4=
 github.com/vmihailenco/tagparser v0.1.0/go.mod h1:OeAg3pn3UbLjkWt+rN9oFYB6u/cQgqMEUPoW2WPyhdI=
 github.com/vmihailenco/tagparser v0.1.1/go.mod h1:OeAg3pn3UbLjkWt+rN9oFYB6u/cQgqMEUPoW2WPyhdI=
-github.com/websmee/example_of_my_code/quotes v0.0.0-20210214134420-c6259ad4ba48 h1:euJHT9JMEbcBhKyXxeeGEi0ds/JyKNYkUSd3Q3wB6GM=
-github.com/websmee/example_of_my_code/quotes v0.0.0-20210214134420-c6259ad4ba48/go.mod h1:+D1vfjiy44dG/hMJUPx0ZGe8U08qu6nhViRiMlTyU5k=
+github.com/websmee/example_of_my_code v0.0.0-20210223191121-e08a223c2725 h1:W4XWRIVSCo0sfg0Xu7991nHhBDdyuMrASCwQbwzz3Iw=
+github.com/websmee/example_of_my_code/quotes v0.0.0-20210223191121-e08a223c2725 h1:3/1cCzKxi1mzMIcvN4uEhWQjVdY4bc5AxGgXw7lSy1c=
+github.com/websmee/example_of_my_code/quotes v0.0.0-20210223191121-e08a223c2725/go.mod h1:HpsNwzyYx4jEUA0Z0QsJQCeaRjIvFFT/08/oxiIS34k=
+github.com/websmee/example_of_my_code/quotes v0.0.0-20210313212940-2889b1c92543 h1:fNXIonTr5h9PFEegKAwPQmDLxt5Lg5dVUglbirMiRzk=
+github.com/websmee/example_of_my_code/quotes v0.0.0-20210313212940-2889b1c92543/go.mod h1:eEly3ZOZR27YRH3/s/Gv8clnOCXtjpOzhnHKWUfCEt0=
 github.com/websmee/ms v0.0.0-20210124201802-eb4e2f302dff/go.mod h1:nfmM9wzCuLhCRBNIVUtchs3WS31G41oSDofyy35YGEg=
+github.com/websmee/ms v0.0.0-20210307191836-63e0d524c105 h1:4E+mkBM26Ap/hm0vkU+GftRWoVqNrFPcP/iVoMUmLQ4=
+github.com/websmee/ms v0.0.0-20210307191836-63e0d524c105/go.mod h1:gbyp9MhrlaxbtC5L0ha+tVvhyy5vJyzFgDLg969Qwy0=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
 go.etcd.io/bbolt v1.3.3/go.mod h1:IbVyRI1SCnLcuJnV2u8VeU0CEYM7e686BmAb1XKL+uU=
 go.etcd.io/etcd v0.0.0-20191023171146-3cf2f69b5738/go.mod h1:dnLIgRNXwCJa5e+c6mIZCrds/GIG4ncV9HhK5PX7jPg=

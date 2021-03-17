@@ -18,8 +18,9 @@ import (
 )
 
 type grpcServer struct {
-	getCandlesticks grpctransport.Handler
 	proto.UnimplementedQuotesServer
+	getQuotes       grpctransport.Handler
+	getCandlesticks grpctransport.Handler
 }
 
 func NewGRPCServer(endpoints Quotes, otTracer stdopentracing.Tracer, zipkinTracer *stdzipkin.Tracer, logger log.Logger) proto.QuotesServer {
@@ -32,6 +33,12 @@ func NewGRPCServer(endpoints Quotes, otTracer stdopentracing.Tracer, zipkinTrace
 	}
 
 	return &grpcServer{
+		getQuotes: grpctransport.NewServer(
+			endpoints.GetQuotesEndpoint,
+			decodeGRPCGetQuotesRequest,
+			encodeGRPCGetQuotesResponse,
+			append(options, grpctransport.ServerBefore(opentracing.GRPCToContext(otTracer, "GetQuotes", logger)))...,
+		),
 		getCandlesticks: grpctransport.NewServer(
 			endpoints.GetCandlesticksEndpoint,
 			decodeGRPCGetCandlesticksRequest,
@@ -39,6 +46,31 @@ func NewGRPCServer(endpoints Quotes, otTracer stdopentracing.Tracer, zipkinTrace
 			append(options, grpctransport.ServerBefore(opentracing.GRPCToContext(otTracer, "GetCandlesticks", logger)))...,
 		),
 	}
+}
+
+func (s *grpcServer) GetQuotes(ctx context.Context, req *proto.GetQuotesRequest) (*proto.GetQuotesReply, error) {
+	_, rep, err := s.getQuotes.ServeGRPC(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return rep.(*proto.GetQuotesReply), nil
+}
+
+func decodeGRPCGetQuotesRequest(_ context.Context, _ interface{}) (interface{}, error) {
+	return GetQuotesRequest{}, nil
+}
+
+func encodeGRPCGetQuotesResponse(_ context.Context, response interface{}) (interface{}, error) {
+	resp := response.(GetQuotesResponse)
+	quotes := make(map[int64]*proto.Quote, len(resp.Quotes))
+	for i := range resp.Quotes {
+		quotes[int64(i)] = &proto.Quote{
+			Id:     resp.Quotes[i].ID,
+			Symbol: resp.Quotes[i].Symbol,
+			Name:   resp.Quotes[i].Name,
+		}
+	}
+	return &proto.GetQuotesReply{Quotes: quotes, Err: err2str(resp.Err)}, nil
 }
 
 func (s *grpcServer) GetCandlesticks(ctx context.Context, req *proto.GetCandlesticksRequest) (*proto.GetCandlesticksReply, error) {
@@ -86,7 +118,7 @@ func encodeGRPCGetCandlesticksResponse(_ context.Context, response interface{}) 
 			Volume:    int64(resp.Candlesticks[i].Volume),
 			Timestamp: resp.Candlesticks[i].Timestamp.Unix(),
 			Interval:  string(resp.Candlesticks[i].Interval),
-			QuoteId:   resp.Candlesticks[i].QuoteId,
+			QuoteId:   resp.Candlesticks[i].QuoteID,
 		}
 	}
 	return &proto.GetCandlesticksReply{Candlesticks: candlesticks, Err: err2str(resp.Err)}, nil

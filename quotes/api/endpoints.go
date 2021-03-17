@@ -6,6 +6,7 @@ import (
 
 	"github.com/websmee/example_of_my_code/quotes/app"
 	"github.com/websmee/example_of_my_code/quotes/domain/candlestick"
+	"github.com/websmee/example_of_my_code/quotes/domain/quote"
 
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
@@ -17,10 +18,23 @@ import (
 )
 
 type Quotes struct {
+	GetQuotesEndpoint       endpoint.Endpoint
 	GetCandlesticksEndpoint endpoint.Endpoint
 }
 
 func NewQuotes(svc app.QuotesApp, logger log.Logger, duration metrics.Histogram, otTracer stdopentracing.Tracer, zipkinTracer *stdzipkin.Tracer) Quotes {
+	var getQuotesEndpoint endpoint.Endpoint
+	{
+		getQuotesEndpoint = MakeGetQuotesEndpoint(svc)
+		// getQuotesEndpoint = ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second), 1))(getQuotesEndpoint)
+		// getQuotesEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(getQuotesEndpoint)
+		getQuotesEndpoint = opentracing.TraceServer(otTracer, "GetQuotes")(getQuotesEndpoint)
+		if zipkinTracer != nil {
+			getQuotesEndpoint = zipkin.TraceEndpoint(zipkinTracer, "GetQuotes")(getQuotesEndpoint)
+		}
+		getQuotesEndpoint = LoggingMiddleware(log.With(logger, "method", "GetQuotes"))(getQuotesEndpoint)
+		getQuotesEndpoint = InstrumentingMiddleware(duration.With("method", "GetQuotes"))(getQuotesEndpoint)
+	}
 	var getCandlesticksEndpoint endpoint.Endpoint
 	{
 		getCandlesticksEndpoint = MakeGetCandlesticksEndpoint(svc)
@@ -34,7 +48,15 @@ func NewQuotes(svc app.QuotesApp, logger log.Logger, duration metrics.Histogram,
 		getCandlesticksEndpoint = InstrumentingMiddleware(duration.With("method", "GetCandlesticks"))(getCandlesticksEndpoint)
 	}
 	return Quotes{
+		GetQuotesEndpoint:       getQuotesEndpoint,
 		GetCandlesticksEndpoint: getCandlesticksEndpoint,
+	}
+}
+
+func MakeGetQuotesEndpoint(s app.QuotesApp) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		quotes, err := s.GetQuotes()
+		return GetQuotesResponse{Quotes: quotes, Err: err}, nil
 	}
 }
 
@@ -47,8 +69,18 @@ func MakeGetCandlesticksEndpoint(s app.QuotesApp) endpoint.Endpoint {
 }
 
 var (
+	_ endpoint.Failer = GetQuotesResponse{}
 	_ endpoint.Failer = GetCandlesticksResponse{}
 )
+
+type GetQuotesRequest struct{}
+
+type GetQuotesResponse struct {
+	Quotes []quote.Quote
+	Err    error
+}
+
+func (r GetQuotesResponse) Failed() error { return r.Err }
 
 type GetCandlesticksRequest struct {
 	Symbol   string

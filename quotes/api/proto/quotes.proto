@@ -5,7 +5,21 @@ package proto;
 option go_package = ".;proto";
 
 service Quotes {
+  rpc GetQuotes (GetQuotesRequest) returns (GetQuotesReply) {}
   rpc GetCandlesticks (GetCandlesticksRequest) returns (GetCandlesticksReply) {}
+}
+
+message GetQuotesRequest {}
+
+message GetQuotesReply {
+  map<int64, Quote> quotes = 1;
+  string err = 2;
+}
+
+message Quote {
+  int64 id = 1;
+  string symbol = 2;
+  string name = 3;
 }
 
 message GetCandlesticksRequest {

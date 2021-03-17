@@ -9,10 +9,7 @@ import (
 type Interval string
 
 const (
-	IntervalMinute Interval = "1m"
-	IntervalHour   Interval = "1h"
-	IntervalDay    Interval = "1d"
-	IntervalMonth  Interval = "1mo"
+	IntervalHour Interval = "1h"
 )
 
 type Candlestick struct {
@@ -24,20 +21,5 @@ type Candlestick struct {
 	Volume    int             `pg:",use_zero"`
 	Timestamp time.Time
 	Interval  Interval
-	QuoteId   int64
-}
-
-func (r Interval) Minutes() int {
-	switch r {
-	case IntervalMinute:
-		return 1
-	case IntervalHour:
-		return 60
-	case IntervalDay:
-		return 60 * 24
-	case IntervalMonth:
-		return 60 * 24 * 30
-	}
-
-	return 0
+	QuoteID   int64
 }

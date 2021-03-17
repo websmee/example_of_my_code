@@ -2,13 +2,14 @@ package infrastructure
 
 import (
 	"encoding/csv"
-	"github.com/websmee/example_of_my_code/adviser/domain/params"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
+
+	"github.com/websmee/example_of_my_code/adviser/domain/params"
 )
 
 type paramsFileRepository struct {

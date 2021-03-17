@@ -15,7 +15,7 @@ func NewQuoteRepository(db *pg.DB) *QuoteRepository {
 	return &QuoteRepository{db}
 }
 
-func (r *QuoteRepository) GetQuotes() ([]quote.Quote, error) {
+func (r QuoteRepository) GetQuotes() ([]quote.Quote, error) {
 	var quotes []quote.Quote
 
 	err := r.db.Model(&quote.Quote{}).Select(&quotes)
@@ -27,7 +27,7 @@ func (r *QuoteRepository) GetQuotes() ([]quote.Quote, error) {
 	return quotes, nil
 }
 
-func (r *QuoteRepository) GetQuote(symbol string) (*quote.Quote, error) {
+func (r QuoteRepository) GetQuote(symbol string) (*quote.Quote, error) {
 	q := &quote.Quote{}
 	err := r.db.Model(q).Where("symbol = ?", symbol).Select()
 
@@ -36,4 +36,13 @@ func (r *QuoteRepository) GetQuote(symbol string) (*quote.Quote, error) {
 	}
 
 	return q, nil
+}
+
+func (r QuoteRepository) UpdateQuoteStatus(quote *quote.Quote, status quote.Status) error {
+	_, err := r.db.Model(quote).
+		Set("status = ?", status).
+		WherePK().
+		Update()
+
+	return errors.Wrap(err, "UpdateQuoteStatus failed")
 }

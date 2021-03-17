@@ -7,8 +7,11 @@ import (
 	zipkinhttp "github.com/openzipkin/zipkin-go/reporter/http"
 )
 
-func GetTracers(zipkinURL string, zipkinBridge bool) (*zipkin.Tracer, stdopentracing.Tracer, error) {
-	var zipkinTracer *zipkin.Tracer
+func GetTracers(zipkinURL string, zipkinBridge bool) (*zipkin.Tracer, stdopentracing.Tracer, func(), error) {
+	var (
+		zipkinTracer *zipkin.Tracer
+		onclose      = func() {}
+	)
 	{
 		if zipkinURL != "" {
 			var (
@@ -17,11 +20,14 @@ func GetTracers(zipkinURL string, zipkinBridge bool) (*zipkin.Tracer, stdopentra
 				serviceName = "quotes"
 				reporter    = zipkinhttp.NewReporter(zipkinURL)
 			)
-			defer reporter.Close()
+			onclose = func() {
+				reporter.Close()
+			}
 			zEP, _ := zipkin.NewEndpoint(serviceName, hostPort)
 			zipkinTracer, err = zipkin.NewTracer(reporter, zipkin.WithLocalEndpoint(zEP))
 			if err != nil {
-				return nil, nil, err
+				reporter.Close()
+				return nil, nil, nil, err
 			}
 		}
 	}
@@ -36,5 +42,5 @@ func GetTracers(zipkinURL string, zipkinBridge bool) (*zipkin.Tracer, stdopentra
 		}
 	}
 
-	return zipkinTracer, tracer, nil
+	return zipkinTracer, tracer, onclose, nil
 }

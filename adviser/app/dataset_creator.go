@@ -7,7 +7,7 @@ import (
 	"github.com/websmee/example_of_my_code/adviser/domain/candlestick"
 	"github.com/websmee/example_of_my_code/adviser/domain/dataset"
 	"github.com/websmee/example_of_my_code/adviser/domain/normalizer"
-	"github.com/websmee/example_of_my_code/adviser/domain/signal"
+	"github.com/websmee/example_of_my_code/adviser/domain/params"
 )
 
 type DatasetCreatorApp interface {
@@ -18,14 +18,14 @@ type cbsDatasetCreatorApp struct {
 	factory              dataset.Factory
 	datasetRepository    dataset.Repository
 	normalizerRepository normalizer.Repository
-	cbsParams            *signal.CBSParams
+	cbsParams            *params.CBS
 }
 
 func NewCBSDatasetApp(
 	candlestickRepository candlestick.Repository,
 	datasetRepository dataset.Repository,
 	normalizerRepository normalizer.Repository,
-	cbsParams *signal.CBSParams,
+	cbsParams *params.CBS,
 ) DatasetCreatorApp {
 	return &cbsDatasetCreatorApp{
 		factory: dataset.NewFactory(

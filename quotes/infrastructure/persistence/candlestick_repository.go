@@ -36,10 +36,11 @@ func (r *CandlestickRepository) GetCandlesticks(quote *quote.Quote, interval can
 	var candlesticks []candlestick.Candlestick
 
 	err := r.db.Model(&candlestick.Candlestick{}).
-		Where("quote_id = ?", quote.Id).
+		Where("quote_id = ?", quote.ID).
 		Where("interval = ?", interval).
 		Where("timestamp >= ?", from).
 		Where("timestamp <= ?", to).
+		Order("timestamp ASC").
 		Select(&candlesticks)
 
 	if err != nil && err != pg.ErrNoRows {

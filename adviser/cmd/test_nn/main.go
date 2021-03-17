@@ -2,12 +2,12 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
-	"text/tabwriter"
 
+	"github.com/websmee/ms/pkg/cmd"
+	"github.com/websmee/ms/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/websmee/example_of_my_code/adviser/app"
@@ -29,7 +29,7 @@ func run() error {
 		datasetName = fs.String("dataset.name", "GC=F-test", "name of the dataset")
 		datasetPath = fs.String("dataset.path", "./files/datasets/", "path to get datasets")
 	)
-	fs.Usage = usageFor(fs, os.Args[0]+" [flags]")
+	fs.Usage = cmd.UsageFor(fs, os.Args[0]+" [flags]")
 	_ = fs.Parse(os.Args[1:])
 
 	// DEPENDENCIES
@@ -55,26 +55,11 @@ func run() error {
 	}()
 
 	if err := nnTesterApp.TestNN(ctx, *nnName, *datasetName); err != nil {
-		_ = logger.Log("run", "nnTesterApp", "error", fmt.Sprintf("%+v", err))
+		_ = logger.Log("run", "nnTesterApp", "error", err, "stack", errors.GetStackTrace(err))
 		return err
 	}
 
 	_ = logger.Log("run", "exit")
 
 	return nil
-}
-
-func usageFor(fs *flag.FlagSet, short string) func() {
-	return func() {
-		fmt.Fprintf(os.Stderr, "USAGE\n")
-		fmt.Fprintf(os.Stderr, "  %s\n", short)
-		fmt.Fprintf(os.Stderr, "\n")
-		fmt.Fprintf(os.Stderr, "FLAGS\n")
-		w := tabwriter.NewWriter(os.Stderr, 0, 2, 2, ' ', 0)
-		fs.VisitAll(func(f *flag.Flag) {
-			fmt.Fprintf(w, "\t-%s %s\t%s\n", f.Name, f.DefValue, f.Usage)
-		})
-		w.Flush()
-		fmt.Fprintf(os.Stderr, "\n")
-	}
 }

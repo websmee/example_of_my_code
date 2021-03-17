@@ -9,11 +9,11 @@ import (
 	"github.com/websmee/example_of_my_code/adviser/domain/advice"
 	"github.com/websmee/example_of_my_code/adviser/domain/candlestick"
 	"github.com/websmee/example_of_my_code/adviser/domain/nn"
-	"github.com/websmee/example_of_my_code/adviser/domain/signal"
+	"github.com/websmee/example_of_my_code/adviser/domain/params"
 )
 
 type Factory interface {
-	CreateCBSDataset(ctx context.Context, cbsParams *signal.CBSParams, quoteSymbol string, from, to time.Time) (*Dataset, error)
+	CreateCBSDataset(ctx context.Context, cbsParams *params.CBS, quoteSymbol string, from, to time.Time) (*Dataset, error)
 }
 
 type factory struct {
@@ -28,7 +28,7 @@ func NewFactory(
 	}
 }
 
-func (r factory) CreateCBSDataset(ctx context.Context, cbsParams *signal.CBSParams, quoteSymbol string, from, to time.Time) (*Dataset, error) {
+func (r factory) CreateCBSDataset(ctx context.Context, cbsParams *params.CBS, quoteSymbol string, from, to time.Time) (*Dataset, error) {
 	hours, err := r.candlestickRepository.GetCandlesticks(ctx, quoteSymbol, candlestick.IntervalHour, from, to)
 	if err != nil {
 		return nil, err

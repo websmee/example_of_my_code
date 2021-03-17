@@ -7,5 +7,5 @@ import (
 )
 
 type Loader interface {
-	LoadCandlesticks(quote *quote.Quote, start time.Time, end time.Time, interval Interval) ([]Candlestick, error)
+	LoadCandlesticks(quote quote.Quote, start, end time.Time, interval Interval) ([]Candlestick, error)
 }
