@@ -385,6 +385,8 @@ github.com/websmee/example_of_my_code/quotes v0.0.0-20210223191121-e08a223c2725 
 github.com/websmee/example_of_my_code/quotes v0.0.0-20210223191121-e08a223c2725/go.mod h1:HpsNwzyYx4jEUA0Z0QsJQCeaRjIvFFT/08/oxiIS34k=
 github.com/websmee/example_of_my_code/quotes v0.0.0-20210313212940-2889b1c92543 h1:fNXIonTr5h9PFEegKAwPQmDLxt5Lg5dVUglbirMiRzk=
 github.com/websmee/example_of_my_code/quotes v0.0.0-20210313212940-2889b1c92543/go.mod h1:eEly3ZOZR27YRH3/s/Gv8clnOCXtjpOzhnHKWUfCEt0=
+github.com/websmee/example_of_my_code/quotes v0.0.0-20210317205313-b0e9559f143f h1:vUVuaXKAtIbbLVWjWpjen8znGoi6eS/FkjzcfyCjHds=
+github.com/websmee/example_of_my_code/quotes v0.0.0-20210317205313-b0e9559f143f/go.mod h1:dgnvBpdUYn68QmFmE3H8+K6TWOA2pAMm/0tWlDXzxig=
 github.com/websmee/ms v0.0.0-20210124201802-eb4e2f302dff/go.mod h1:nfmM9wzCuLhCRBNIVUtchs3WS31G41oSDofyy35YGEg=
 github.com/websmee/ms v0.0.0-20210307191836-63e0d524c105 h1:4E+mkBM26Ap/hm0vkU+GftRWoVqNrFPcP/iVoMUmLQ4=
 github.com/websmee/ms v0.0.0-20210307191836-63e0d524c105/go.mod h1:gbyp9MhrlaxbtC5L0ha+tVvhyy5vJyzFgDLg969Qwy0=

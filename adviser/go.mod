@@ -12,7 +12,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/shopspring/decimal v1.2.0
 	github.com/sony/gobreaker v0.4.1
-	github.com/websmee/example_of_my_code/quotes v0.0.0-20210223191121-e08a223c2725
+	github.com/websmee/example_of_my_code/quotes v0.0.0-20210317205313-b0e9559f143f
 	github.com/websmee/ms v0.0.0-20210307191836-63e0d524c105
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b
 	gonum.org/v1/gonum v0.8.2
