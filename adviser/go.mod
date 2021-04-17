@@ -15,7 +15,7 @@ require (
 	github.com/prometheus/client_golang v1.3.0
 	github.com/shopspring/decimal v1.2.0
 	github.com/sony/gobreaker v0.4.1
-	github.com/websmee/example_of_my_code/quotes v0.0.0-20210313212940-2889b1c92543
+	github.com/websmee/example_of_my_code/quotes v0.0.0-20210417125503-99da92f6031a
 	github.com/websmee/ms v0.0.0-20210307191836-63e0d524c105
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b
 	google.golang.org/grpc v1.34.0

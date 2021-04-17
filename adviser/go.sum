@@ -307,8 +307,6 @@ github.com/pborman/uuid v1.2.0/go.mod h1:X/NO0urCmaxf9VXbdlT7C2Yzkj2IKimNn4k+gtP
 github.com/performancecopilot/speed v3.0.0+incompatible/go.mod h1:/CLtqpZ5gBg1M9iaPbIdPPGyKcA8hKdoy6hAWba7Yac=
 github.com/pierrec/lz4 v1.0.2-0.20190131084431-473cd7ce01a1/go.mod h1:3/3N9NVKO0jef7pBehbT1qWhCMrIgbYNnFAZCqQ5LRc=
 github.com/pierrec/lz4 v2.0.5+incompatible/go.mod h1:pdkljMzZIN41W+lC3N2tnIh5sFi+IEE17M5jbnwPHcY=
-github.com/piquette/finance-go v1.0.0 h1:0nHbZCbhAsUMUt18oTgy5bHQfPRGhcNA0EbpxNRsZAA=
-github.com/piquette/finance-go v1.0.0/go.mod h1:H51NoGFnfu41Un/Fp0aAhS2lLRFBiiwHhMsV59bXAI0=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
@@ -391,8 +389,8 @@ github.com/vmihailenco/msgpack/v4 v4.3.11/go.mod h1:gborTTJjAo/GWTqqRjrLCn9pgNN+
 github.com/vmihailenco/tagparser v0.1.0/go.mod h1:OeAg3pn3UbLjkWt+rN9oFYB6u/cQgqMEUPoW2WPyhdI=
 github.com/vmihailenco/tagparser v0.1.1 h1:quXMXlA39OCbd2wAdTsGDlK9RkOk6Wuw+x37wVyIuWY=
 github.com/vmihailenco/tagparser v0.1.1/go.mod h1:OeAg3pn3UbLjkWt+rN9oFYB6u/cQgqMEUPoW2WPyhdI=
-github.com/websmee/example_of_my_code/quotes v0.0.0-20210313212940-2889b1c92543 h1:fNXIonTr5h9PFEegKAwPQmDLxt5Lg5dVUglbirMiRzk=
-github.com/websmee/example_of_my_code/quotes v0.0.0-20210313212940-2889b1c92543/go.mod h1:eEly3ZOZR27YRH3/s/Gv8clnOCXtjpOzhnHKWUfCEt0=
+github.com/websmee/example_of_my_code/quotes v0.0.0-20210417125503-99da92f6031a h1:Cwkw4QTSjNE1gtCiEDXVS0+INRxXOfCD0EHrSRHMWBw=
+github.com/websmee/example_of_my_code/quotes v0.0.0-20210417125503-99da92f6031a/go.mod h1:SM3Ie/KueKee4RPQLEC2p3nKSawmz9Tk0mYW4EJVx+w=
 github.com/websmee/ms v0.0.0-20210307191836-63e0d524c105 h1:4E+mkBM26Ap/hm0vkU+GftRWoVqNrFPcP/iVoMUmLQ4=
 github.com/websmee/ms v0.0.0-20210307191836-63e0d524c105/go.mod h1:gbyp9MhrlaxbtC5L0ha+tVvhyy5vJyzFgDLg969Qwy0=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
