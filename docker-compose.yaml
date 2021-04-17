@@ -1,10 +1,48 @@
 version: '3'
 
 services:
+  adviser-app:
+    build: adviser
+    command: [
+      /go/src/app/wait-for-it.sh,
+      quotes-app:8083,
+      --,
+      go,
+      run,
+      main.go,
+      --params.path=/go/src/app/files/current/,
+      --grpc.port=8085,
+      --consul.addr=consul,
+      --consul.service_addr=adviser-app,
+      --consul.service_port=8085,
+      --debug.port=8084,
+      --zipkin-url=http://zipkin:9411/api/v2/spans,
+      --zipkin-ot-bridge=true,
+    ]
+    environment:
+      GO111MODULE: "on"
+    volumes:
+      - ./adviser:/go/src/app
+    ports:
+      - "8084:8084"
+      - "8085:8085"
+    depends_on:
+      - quotes-app
+      - consul
+      - zipkin
+    links:
+      - quotes-app
+      - consul
+      - zipkin
   quotes-app:
     build: quotes
     command: [
-      /go/bin/app,
+      /go/src/app/wait-for-it.sh,
+      quotes-db:5432,
+      --,
+      go,
+      run,
+      main.go,
       --grpc.port=8083,
       --consul.addr=consul,
       --consul.service_addr=quotes-app,

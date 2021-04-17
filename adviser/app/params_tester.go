@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
-	"github.com/shopspring/decimal"
 
 	"github.com/websmee/example_of_my_code/adviser/domain/advice"
 	"github.com/websmee/example_of_my_code/adviser/domain/candlestick"
@@ -21,36 +21,26 @@ type ParamsTesterApp interface {
 }
 
 type testerApp struct {
-	quoteRepository       quote.Repository
-	candlestickRepository candlestick.Repository
-	paramsRepository      params.Repository
-	adviser               advice.Adviser
-	calc                  candlestick.Calculator
+	tester           params.AdviserParamsTester
+	adviser          advice.Adviser
+	quoteRepository  quote.Repository
+	paramsRepository params.Repository
+	adviceRepository advice.Repository
+	adviceSelector   advice.Selector
 }
 
-func NewCBSTesterApp(
+func NewCBSScaledTesterApp(
 	quoteRepository quote.Repository,
 	candlestickRepository candlestick.Repository,
 	paramsRepository params.Repository,
+	adviceRepository advice.Repository,
 ) ParamsTesterApp {
 	return newTesterApp(
 		quoteRepository,
 		candlestickRepository,
 		paramsRepository,
-		advice.NewCBSAdviser(candlestickRepository, candlestick.DefaultCalculator()),
-	)
-}
-
-func NewCBSRTesterApp(
-	quoteRepository quote.Repository,
-	candlestickRepository candlestick.Repository,
-	paramsRepository params.Repository,
-) ParamsTesterApp {
-	return newTesterApp(
-		quoteRepository,
-		candlestickRepository,
-		paramsRepository,
-		advice.NewCBSRAdviser(candlestickRepository, candlestick.DefaultCalculator()),
+		adviceRepository,
+		advice.NewCBSScaledAdviser(candlestickRepository, candlestick.NewDefaultCalculator()),
 	)
 }
 
@@ -58,15 +48,17 @@ func newTesterApp(
 	quoteRepository quote.Repository,
 	candlestickRepository candlestick.Repository,
 	paramsRepository params.Repository,
+	adviceRepository advice.Repository,
 	adviser advice.Adviser,
 ) ParamsTesterApp {
 	candlestickRepository = candlestick.NewBasicFilter(candlestickRepository)
 	return &testerApp{
-		quoteRepository:       quoteRepository,
-		candlestickRepository: candlestickRepository,
-		paramsRepository:      paramsRepository,
-		adviser:               adviser,
-		calc:                  candlestick.DefaultCalculator(),
+		tester:           params.NewAdviserParamsTester(candlestickRepository),
+		adviser:          adviser,
+		quoteRepository:  quoteRepository,
+		paramsRepository: paramsRepository,
+		adviceRepository: adviceRepository,
+		adviceSelector:   advice.NewDefaultSelector(),
 	}
 }
 
@@ -81,148 +73,118 @@ func (r testerApp) TestParams(ctx context.Context, name string, from, to time.Ti
 		return err
 	}
 
-	total, err := r.getTotalHours(ctx, quotes, from, to)
+	total, err := r.getTotalSteps(ctx, quotes, from, to)
 	if err != nil {
 		return err
 	}
 	bar := pb.StartNew(total)
 
-	results := new(testResults)
-	results.reasonsCounts = make(map[advice.NoAdviceReason]int64)
-	resultsChan := make(chan *testResults)
-	incrementChan := make(chan bool)
+	var count, advicesOK, profitBuy, profitSell, lossBuy, lossSell int
+	var profitAdvices, lossAdvices, expiredAdvices []advice.InternalAdvice
+	var wg sync.WaitGroup
+	statuses := make(map[advice.Status]int64)
+	advicesChan := make(chan []advice.InternalAdvice)
 	for i := range quotes {
-		go r.testForQuote(ctx, p, quotes[i], from, to, resultsChan, incrementChan)
+		q := quotes[i]
+		wg.Add(1)
+		go func() {
+			r.tester.TestParams(ctx, r.adviser, p, q, from, to, advicesChan)
+			wg.Done()
+		}()
 	}
 
-outer:
-	for {
-		select {
-		case <-incrementChan:
-			bar.Increment()
-		case r := <-resultsChan:
-			results.add(r)
-			if bar.Current() == int64(total) {
-				close(incrementChan)
-				close(resultsChan)
-				break outer
+	go func() {
+		wg.Wait()
+		close(advicesChan)
+		bar.SetCurrent(int64(count))
+	}()
+
+	for a := range advicesChan {
+		count++
+		if count%(total/100) == 0 {
+			bar.SetCurrent(int64(count))
+		}
+
+		var okAdvices []advice.InternalAdvice
+		for i := range a {
+			statuses[a[i].Status]++
+			if a[i].Status == advice.StatusOK {
+				okAdvices = append(okAdvices, a[i])
+			}
+		}
+
+		if selectedAdvice := r.adviceSelector.SelectAdvice(okAdvices); selectedAdvice != nil {
+			advicesOK++
+			switch selectedAdvice.OrderResult {
+			case candlestick.OrderResultTakeProfit:
+				profitAdvices = append(profitAdvices, *selectedAdvice)
+				if selectedAdvice.TakeProfit.GreaterThan(selectedAdvice.CurrentPrice) {
+					profitBuy++
+				} else {
+					profitSell++
+				}
+			case candlestick.OrderResultStopLoss:
+				lossAdvices = append(lossAdvices, *selectedAdvice)
+				if selectedAdvice.TakeProfit.GreaterThan(selectedAdvice.CurrentPrice) {
+					lossBuy++
+				} else {
+					lossSell++
+				}
+			case candlestick.OrderResultExpired:
+				expiredAdvices = append(expiredAdvices, *selectedAdvice)
 			}
 		}
 	}
-
 	bar.Finish()
 
-	frequency := strconv.FormatFloat(float64(results.count)/float64(total)*100, 'f', 2, 64)
-	accuracy := strconv.FormatFloat(float64(results.accurate)/float64(results.count)*100, 'f', 2, 64)
-	fmt.Println("Total", total)
-	r.printReasons(results.reasonsCounts)
+	frequency := strconv.FormatFloat(float64(advicesOK)/float64(count)*100, 'f', 2, 64)
+	accuracy := strconv.FormatFloat(float64(len(profitAdvices))/float64(advicesOK)*100, 'f', 2, 64)
+	r.printStatuses(statuses)
+	fmt.Println("TOTAL", total)
+	fmt.Println("PROFIT BUY", profitBuy)
+	fmt.Println("PROFIT SELL", profitSell)
+	fmt.Println("LOSS BUY", lossBuy)
+	fmt.Println("LOSS SELL", lossSell)
+	fmt.Println("EXPIRED", len(expiredAdvices))
 	fmt.Println("FREQUENCY", frequency)
 	fmt.Println("ACCURACY", accuracy)
-	fmt.Println("LOSS", results.loss)
-	fmt.Println("EXPIRED", results.expired)
+
+	err = r.adviceRepository.SaveAdvices(name+"_profit", profitAdvices)
+	if err != nil {
+		return err
+	}
+
+	err = r.adviceRepository.SaveAdvices(name+"_loss", lossAdvices)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-type testResults struct {
-	reasonsCounts map[advice.NoAdviceReason]int64
-	count         int
-	accurate      int
-	loss          int
-	expired       int
-}
-
-func (r *testResults) add(add *testResults) {
-	for k := range add.reasonsCounts {
-		r.reasonsCounts[k] += add.reasonsCounts[k]
-	}
-	r.count += add.count
-	r.accurate += add.accurate
-	r.loss += add.loss
-	r.expired += add.expired
-}
-
-func (r testerApp) testForQuote(
-	ctx context.Context,
-	p []decimal.Decimal,
-	quote quote.Quote,
-	from, to time.Time,
-	resultsChan chan *testResults,
-	incrementChan chan bool,
-) {
-	hours, err := r.candlestickRepository.GetCandlesticks(ctx, quote.Symbol, candlestick.IntervalHour, from, to)
-	if err != nil {
-		panic(err)
-	}
-
-	results := new(testResults)
-	results.reasonsCounts = make(map[advice.NoAdviceReason]int64)
-	for j := range hours {
-		a, reason, err := r.adviser.GetAdvice(ctx, p, hours[j], quote.Symbol)
-		if err != nil {
-			panic(err)
-		}
-
-		results.reasonsCounts[reason]++
-
-		if a != nil {
-			results.count++
-			expirationPeriod, err := r.candlestickRepository.GetCandlesticks(
-				ctx,
-				quote.Symbol,
-				candlestick.IntervalHour,
-				hours[j].Timestamp.Add(time.Hour),
-				a.Expiration,
-			)
-			if err != nil {
-				panic(err)
-			}
-
-			result, _ := r.calc.CalculateOrderResult(
-				hours[j].Close,
-				hours[j].Close.Sub(a.TakeProfit).Abs(),
-				hours[j].Close.Sub(a.StopLoss).Abs(),
-				expirationPeriod,
-			)
-			switch {
-			case (a.TakeProfit.GreaterThan(hours[j].Close) && result == candlestick.OrderResultProfitBuy) ||
-				(a.TakeProfit.LessThan(hours[j].Close) && result == candlestick.OrderResultProfitSell):
-				results.accurate++
-			case result == candlestick.OrderResultExpired:
-				results.expired++
-			default:
-				results.loss++
-			}
-		}
-		incrementChan <- true
-	}
-	resultsChan <- results
-}
-
-func (r testerApp) getTotalHours(ctx context.Context, quotes []quote.Quote, from, to time.Time) (int, error) {
+func (r testerApp) getTotalSteps(ctx context.Context, quotes []quote.Quote, from, to time.Time) (int, error) {
 	total := 0
 	for i := range quotes {
-		hours, err := r.candlestickRepository.GetCandlesticks(ctx, quotes[i].Symbol, candlestick.IntervalHour, from, to)
+		t, err := r.tester.GetTotalSteps(ctx, quotes[i], from, to)
 		if err != nil {
 			return 0, err
 		}
-		total += len(hours)
+		total += t
 	}
 
 	return total, nil
 }
 
-func (r testerApp) printReasons(reasonsCounts map[advice.NoAdviceReason]int64) {
-	reasons := make([]int, len(reasonsCounts))
+func (r testerApp) printStatuses(statuses map[advice.Status]int64) {
+	s := make([]string, len(statuses))
 	i := 0
-	for k := range reasonsCounts {
-		reasons[i] = int(k)
+	for k := range statuses {
+		s[i] = string(k)
 		i++
 	}
-	sort.Ints(reasons)
+	sort.Strings(s)
 
-	for _, k := range reasons {
-		rn := advice.NoAdviceReason(k)
-		fmt.Println(r.adviser.GetReasonName(rn), reasonsCounts[rn])
+	for _, status := range s {
+		fmt.Println(status, statuses[advice.Status(status)])
 	}
 }

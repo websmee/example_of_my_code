@@ -13,74 +13,47 @@ import (
 	"github.com/websmee/example_of_my_code/adviser/domain/advice"
 	"github.com/websmee/example_of_my_code/adviser/domain/candlestick"
 	"github.com/websmee/example_of_my_code/adviser/domain/params"
+	"github.com/websmee/example_of_my_code/adviser/domain/quote"
 )
 
-const optimizerThreads = 16
-
 type ParamsOptimizerApp interface {
-	OptimizeParams(ctx context.Context, name, quoteSymbol string, from, to time.Time, minFrequency float64) error
+	OptimizeParams(ctx context.Context, name string, from, to time.Time, minFrequency float64) error
 }
 
 type optimizerApp struct {
+	quoteRepository       quote.Repository
 	candlestickRepository candlestick.Repository
 	paramsRepository      params.Repository
+	tester                params.AdviserParamsTester
 	adviser               advice.Adviser
 	calc                  candlestick.Calculator
+	adviceSelector        advice.Selector
 	startParams           []decimal.Decimal
 	minParams             []decimal.Decimal
 	maxParams             []decimal.Decimal
 	modifyRate            float64
 }
 
-func NewCBSOptimizerApp(
+func NewCBSScaledOptimizerApp(
+	quoteRepository quote.Repository,
 	candlestickRepository candlestick.Repository,
 	paramsRepository params.Repository,
 	modifyRate float64,
 ) ParamsOptimizerApp {
 	return newOptimizerApp(
+		quoteRepository,
 		candlestickRepository,
 		paramsRepository,
-		advice.NewCBSAdviser(candlestickRepository, candlestick.DefaultCalculator()),
-		minCBSParams().GetParams(),
-		minCBSParams().GetParams(),
-		maxCBSParams().GetParams(),
-		modifyRate,
-	)
-}
-
-func NewCBSROptimizerApp(
-	candlestickRepository candlestick.Repository,
-	paramsRepository params.Repository,
-	modifyRate float64,
-) ParamsOptimizerApp {
-	return newOptimizerApp(
-		candlestickRepository,
-		paramsRepository,
-		advice.NewCBSRAdviser(candlestickRepository, candlestick.DefaultCalculator()),
-		minCBSRParams().GetParams(),
-		minCBSRParams().GetParams(),
-		maxCBSRParams().GetParams(),
-		modifyRate,
-	)
-}
-
-func NewFTOptimizerApp(
-	candlestickRepository candlestick.Repository,
-	paramsRepository params.Repository,
-	modifyRate float64,
-) ParamsOptimizerApp {
-	return newOptimizerApp(
-		candlestickRepository,
-		paramsRepository,
-		advice.NewFTAdviser(candlestickRepository, candlestick.DefaultCalculator()),
-		minFTParams().GetParams(),
-		minFTParams().GetParams(),
-		maxFTParams().GetParams(),
+		advice.NewCBSScaledAdviser(candlestickRepository, candlestick.NewDefaultCalculator()),
+		minCBSScaledParams().GetParams(),
+		minCBSScaledParams().GetParams(),
+		maxCBSScaledParams().GetParams(),
 		modifyRate,
 	)
 }
 
 func newOptimizerApp(
+	quoteRepository quote.Repository,
 	candlestickRepository candlestick.Repository,
 	paramsRepository params.Repository,
 	adviser advice.Adviser,
@@ -91,10 +64,13 @@ func newOptimizerApp(
 ) ParamsOptimizerApp {
 	candlestickRepository = candlestick.NewBasicFilter(candlestickRepository)
 	return &optimizerApp{
+		quoteRepository:       quoteRepository,
 		candlestickRepository: candlestickRepository,
 		paramsRepository:      paramsRepository,
+		tester:                params.NewAdviserParamsTester(candlestickRepository),
 		adviser:               adviser,
-		calc:                  candlestick.DefaultCalculator(),
+		calc:                  candlestick.NewDefaultCalculator(),
+		adviceSelector:        advice.NewDefaultSelector(),
 		startParams:           startParams,
 		minParams:             minParams,
 		maxParams:             maxParams,
@@ -108,68 +84,44 @@ type paramsStats struct {
 	accuracy  float64
 }
 
-func minCBSParams() *params.CBS {
-	return &params.CBS{
-		CalmDurationHours:   15,
-		CalmMaxVolatility:   decimal.NewFromFloat(1.5),
-		CalmMaxCurvature:    decimal.NewFromFloat(2.5),
-		StormDurationHours:  4,
-		StormMinPower:       decimal.NewFromFloat(4),
-		StormMaxPower:       decimal.NewFromFloat(9),
-		TakeProfitDiff:      decimal.NewFromFloat(3),
-		StopLossDiff:        decimal.NewFromFloat(3),
-		CheckDirectionHours: 24,
-		CheckDirectionDiff:  decimal.NewFromFloat(0),
+func minCBSScaledParams() *advice.CBSScaledParams {
+	return &advice.CBSScaledParams{
+		PeriodHoursMin:                 20,
+		PeriodHoursMax:                 40,
+		StormToCalmMin:                 decimal.NewFromFloat(0.2),
+		StormToCalmMax:                 decimal.NewFromFloat(0.4),
+		StormMinPowerToCalmMaxChange:   decimal.NewFromFloat(3),
+		StormMaxPowerToCalmMaxChange:   decimal.NewFromFloat(8),
+		StormMinVolumeToCalmVolume:     decimal.NewFromFloat(0.5),
+		CalmMaxChangeToStormPower:      decimal.NewFromFloat(0.35),
+		CalmMaxCurvatureToStormPower:   decimal.NewFromFloat(0.1),
+		TakeProfitDiffToStormPower:     decimal.NewFromFloat(0.4),
+		StopLossDiffToStormPower:       decimal.NewFromFloat(0.4),
+		CalmToCheckDirection:           decimal.NewFromFloat(0.3),
+		StormPowerToCheckDirectionDiff: decimal.NewFromFloat(1),
 	}
 }
 
-func maxCBSParams() *params.CBS {
-	return &params.CBS{
-		CalmDurationHours:   17,
-		CalmMaxVolatility:   decimal.NewFromFloat(2.5),
-		CalmMaxCurvature:    decimal.NewFromFloat(3.5),
-		StormDurationHours:  6,
-		StormMinPower:       decimal.NewFromFloat(5),
-		StormMaxPower:       decimal.NewFromFloat(11),
-		TakeProfitDiff:      decimal.NewFromFloat(3),
-		StopLossDiff:        decimal.NewFromFloat(3),
-		CheckDirectionHours: 24,
-		CheckDirectionDiff:  decimal.NewFromFloat(0),
+func maxCBSScaledParams() *advice.CBSScaledParams {
+	return &advice.CBSScaledParams{
+		PeriodHoursMin:                 30,
+		PeriodHoursMax:                 50,
+		StormToCalmMin:                 decimal.NewFromFloat(0.2),
+		StormToCalmMax:                 decimal.NewFromFloat(0.4),
+		StormMinPowerToCalmMaxChange:   decimal.NewFromFloat(3),
+		StormMaxPowerToCalmMaxChange:   decimal.NewFromFloat(8),
+		StormMinVolumeToCalmVolume:     decimal.NewFromFloat(0.5),
+		CalmMaxChangeToStormPower:      decimal.NewFromFloat(0.35),
+		CalmMaxCurvatureToStormPower:   decimal.NewFromFloat(0.1),
+		TakeProfitDiffToStormPower:     decimal.NewFromFloat(0.4),
+		StopLossDiffToStormPower:       decimal.NewFromFloat(0.4),
+		CalmToCheckDirection:           decimal.NewFromFloat(0.3),
+		StormPowerToCheckDirectionDiff: decimal.NewFromFloat(1),
 	}
 }
 
-func minCBSRParams() *params.CBSR {
-	return &params.CBSR{
-		PeriodHoursMin:                 11,
-		PeriodHoursMax:                 30,
-		StormToCalmMin:                 decimal.NewFromFloat(0.24),
-		StormToCalmMax:                 decimal.NewFromFloat(0.5),
-		CalmMaxVolatilityToStormPower:  decimal.NewFromFloat(0.27),
-		CalmMaxCurvatureToStormPower:   decimal.NewFromFloat(0.32),
-		TakeProfitDiffToStormPower:     decimal.NewFromFloat(0.43),
-		StopLossDiffToStormPower:       decimal.NewFromFloat(0.43),
-		CalmToCheckDirection:           decimal.NewFromFloat(0.71),
-		StormPowerToCheckDirectionDiff: decimal.NewFromFloat(5),
-	}
-}
-
-func maxCBSRParams() *params.CBSR {
-	return &params.CBSR{
-		PeriodHoursMin:                 11,
-		PeriodHoursMax:                 30,
-		StormToCalmMin:                 decimal.NewFromFloat(0.28),
-		StormToCalmMax:                 decimal.NewFromFloat(0.7),
-		CalmMaxVolatilityToStormPower:  decimal.NewFromFloat(0.27),
-		CalmMaxCurvatureToStormPower:   decimal.NewFromFloat(0.32),
-		TakeProfitDiffToStormPower:     decimal.NewFromFloat(0.43),
-		StopLossDiffToStormPower:       decimal.NewFromFloat(0.43),
-		CalmToCheckDirection:           decimal.NewFromFloat(0.71),
-		StormPowerToCheckDirectionDiff: decimal.NewFromFloat(5),
-	}
-}
-
-func minFTParams() *params.FT {
-	return &params.FT{
+func minFTParams() *advice.FTParams {
+	return &advice.FTParams{
 		TrendDurationHours:  21,
 		TrendMaxVolatility:  decimal.NewFromFloat(3),
 		TrendMinCurvature:   decimal.NewFromFloat(6),
@@ -181,8 +133,8 @@ func minFTParams() *params.FT {
 	}
 }
 
-func maxFTParams() *params.FT {
-	return &params.FT{
+func maxFTParams() *advice.FTParams {
+	return &advice.FTParams{
 		TrendDurationHours:  23,
 		TrendMaxVolatility:  decimal.NewFromFloat(5),
 		TrendMinCurvature:   decimal.NewFromFloat(9),
@@ -194,11 +146,16 @@ func maxFTParams() *params.FT {
 	}
 }
 
-func (r optimizerApp) OptimizeParams(ctx context.Context, name, quoteSymbol string, from, to time.Time, minFrequency float64) error {
+func (r optimizerApp) OptimizeParams(ctx context.Context, name string, from, to time.Time, minFrequency float64) error {
 	modifyingParams := make([]decimal.Decimal, len(r.startParams))
 	copy(modifyingParams, r.startParams)
 
-	hours, err := r.candlestickRepository.GetCandlesticks(ctx, quoteSymbol, candlestick.IntervalHour, from, to)
+	quotes, err := r.quoteRepository.GetQuotes(ctx)
+	if err != nil {
+		return err
+	}
+
+	testerTotalSteps, err := r.getTesterTotalSteps(ctx, quotes, from, to)
 	if err != nil {
 		return err
 	}
@@ -209,50 +166,58 @@ func (r optimizerApp) OptimizeParams(ctx context.Context, name, quoteSymbol stri
 		decimal.NewFromFloat(r.modifyRate),
 	)
 
+	var globalCount int
 	var currentStats, bestStats paramsStats
 	var frequentEnoughStats []paramsStats
-	bar := pb.StartNew(modifier.GetTotalSteps())
+	bar := pb.StartNew(modifier.GetTotalSteps() * testerTotalSteps)
 	for modifier.Modify(modifyingParams) {
-		count := 0
-		accurate := 0
-		total := 0
-		countChan := make(chan bool)
-		accurateChan := make(chan bool)
-		totalChan := make(chan bool)
+		var count, advicesOK, accurate, loss, expired int
 		var wg sync.WaitGroup
-		for i := range hours {
+		advicesChan := make(chan []advice.InternalAdvice)
+		for i := range quotes {
+			q := quotes[i]
 			wg.Add(1)
-			go r.calcStats(
-				ctx,
-				&wg,
-				modifyingParams,
-				hours[i],
-				quoteSymbol,
-				countChan,
-				accurateChan,
-				totalChan,
-			)
-			if (i > 0 && i%optimizerThreads == 0) || i == len(hours)-1 {
-			outer:
-				for {
-					select {
-					case <-countChan:
-						count++
-					case <-accurateChan:
-						accurate++
-					case <-totalChan:
-						total++
-					default:
-						if total == i+1 {
-							break outer
-						}
-					}
+			go func() {
+				r.tester.TestParams(ctx, r.adviser, modifyingParams, q, from, to, advicesChan)
+				wg.Done()
+			}()
+		}
+
+		go func() {
+			wg.Wait()
+			close(advicesChan)
+			bar.SetCurrent(int64(globalCount))
+		}()
+
+		for a := range advicesChan {
+			globalCount++
+			count++
+			if globalCount%(testerTotalSteps/100) == 0 {
+				bar.SetCurrent(int64(globalCount))
+			}
+
+			var okAdvices []advice.InternalAdvice
+			for i := range a {
+				if a[i].Status == advice.StatusOK {
+					okAdvices = append(okAdvices, a[i])
 				}
-				wg.Wait()
+			}
+
+			if selectedAdvice := r.adviceSelector.SelectAdvice(okAdvices); selectedAdvice != nil {
+				advicesOK++
+				switch selectedAdvice.OrderResult {
+				case candlestick.OrderResultTakeProfit:
+					accurate++
+				case candlestick.OrderResultStopLoss:
+					loss++
+				case candlestick.OrderResultExpired:
+					expired++
+				}
 			}
 		}
-		frequency := float64(count) / float64(total) * 100
-		accuracy := float64(accurate) / float64(count) * 100
+
+		frequency := float64(advicesOK) / float64(count) * 100
+		accuracy := float64(accurate) / float64(advicesOK) * 100
 		if frequency >= minFrequency {
 			currentStats = paramsStats{
 				params:    make([]decimal.Decimal, len(modifyingParams)),
@@ -267,7 +232,6 @@ func (r optimizerApp) OptimizeParams(ctx context.Context, name, quoteSymbol stri
 			}
 			frequentEnoughStats = append(frequentEnoughStats, currentStats)
 		}
-		bar.Increment()
 	}
 	bar.Finish()
 
@@ -307,45 +271,15 @@ func (r optimizerApp) saveResults(name string, bestStats paramsStats, frequentEn
 	return nil
 }
 
-func (r optimizerApp) calcStats(
-	ctx context.Context,
-	wg *sync.WaitGroup,
-	params []decimal.Decimal,
-	hour candlestick.Candlestick,
-	quoteSymbol string,
-	countChan chan bool,
-	accurateChan chan bool,
-	totalChan chan bool,
-) {
-	defer wg.Done()
-	a, _, err := r.adviser.GetAdvice(ctx, params, hour, quoteSymbol)
-	if err != nil {
-		panic(err)
-	}
-
-	if a != nil {
-		countChan <- true
-		expirationPeriod, err := r.candlestickRepository.GetCandlesticks(
-			ctx,
-			quoteSymbol,
-			candlestick.IntervalHour,
-			hour.Timestamp.Add(time.Hour),
-			a.Expiration,
-		)
+func (r optimizerApp) getTesterTotalSteps(ctx context.Context, quotes []quote.Quote, from, to time.Time) (int, error) {
+	total := 0
+	for i := range quotes {
+		t, err := r.tester.GetTotalSteps(ctx, quotes[i], from, to)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-
-		result, _ := r.calc.CalculateOrderResult(
-			hour.Close,
-			hour.Close.Sub(a.TakeProfit).Abs(),
-			hour.Close.Sub(a.StopLoss).Abs(),
-			expirationPeriod,
-		)
-		if (a.TakeProfit.GreaterThan(hour.Close) && result == candlestick.OrderResultProfitBuy) ||
-			(a.TakeProfit.LessThan(hour.Close) && result == candlestick.OrderResultProfitSell) {
-			accurateChan <- true
-		}
+		total += t
 	}
-	totalChan <- true
+
+	return total, nil
 }

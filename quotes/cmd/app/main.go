@@ -8,12 +8,15 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/go-pg/pg/v9"
 	"github.com/websmee/ms/pkg/cmd"
 	"github.com/websmee/ms/pkg/errors"
 
 	"github.com/websmee/example_of_my_code/quotes/cmd/dependencies"
+	"github.com/websmee/example_of_my_code/quotes/infrastructure"
+	"github.com/websmee/example_of_my_code/quotes/infrastructure/tiingo"
 
 	"github.com/websmee/ms/pkg/discovery"
 	"github.com/websmee/ms/pkg/discovery/health"
@@ -106,7 +109,10 @@ func run() error {
 
 	// CONFIG
 
-	var dbConfig *config.DB
+	var (
+		dbConfig     *config.DB
+		tiingoConfig *config.Tiingo
+	)
 	{
 		cfg, err := config.NewConsulKVConfig(*consulAddr+":"+*consulPort, logger)
 		if err != nil {
@@ -117,6 +123,12 @@ func run() error {
 		dbConfig, err = cfg.GetDB("quotes_db")
 		if err != nil {
 			_ = logger.Log("config", "db", "error", err, "stack", errors.GetStackTrace(err))
+			return err
+		}
+
+		tiingoConfig, err = cfg.GetTiingo()
+		if err != nil {
+			_ = logger.Log("config", "tiingo", "error", err, "stack", errors.GetStackTrace(err))
 			return err
 		}
 	}
@@ -142,7 +154,7 @@ func run() error {
 	// INIT
 
 	var (
-		extLogger       = log.NewNopLogger() // change it to logger to see extended log in console
+		extLogger       = logger
 		quoteRepo       = persistence.NewQuoteRepository(db)
 		candlestickRepo = persistence.NewCandlestickRepository(db)
 		quotes          = app.NewQuotesApp(extLogger, count, quoteRepo, candlestickRepo)
@@ -158,6 +170,13 @@ func run() error {
 		grpcHealthServer = health.NewGRPCServer(healthCheckEndpoint, tracer, zipkinTracer, logger)
 
 		serviceRegistrar = discovery.NewConsulRegistrar(*consulAddr+":"+*consulPort, logger)
+
+		candlestickLoader = app.NewCandlestickLoader(
+			extLogger,
+			infrastructure.NewTiingoCandlestickLoader(tiingo.NewClient(tiingoConfig)),
+			candlestickRepo,
+			quoteRepo,
+		)
 	)
 
 	var g group.Group
@@ -204,6 +223,24 @@ func run() error {
 		}, func(error) {
 			grpcListener.Close()
 			serviceRegistrar.DeregisterAll()
+		})
+	}
+	{
+		// LOAD LATEST CANDLESTICKS
+
+		ticker := time.NewTicker(time.Minute)
+		g.Add(func() error {
+			for range ticker.C {
+				if time.Now().Minute() == 1 { // every first minute of every hour
+					if err := candlestickLoader.LoadLatest(); err != nil {
+						_ = logger.Log("background task", "load latest candlesticks", "error", err, "stack", errors.GetStackTrace(err))
+					}
+				}
+			}
+
+			return nil
+		}, func(error) {
+			ticker.Stop()
 		})
 	}
 	{

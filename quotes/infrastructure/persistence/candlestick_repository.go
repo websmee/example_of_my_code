@@ -18,7 +18,7 @@ func NewCandlestickRepository(db *pg.DB) *CandlestickRepository {
 	return &CandlestickRepository{db}
 }
 
-func (r *CandlestickRepository) SaveCandlestick(candlestick *candlestick.Candlestick) error {
+func (r CandlestickRepository) SaveCandlestick(candlestick *candlestick.Candlestick) error {
 	_, err := r.db.Model(candlestick).
 		OnConflict("(quote_id, interval, timestamp) DO UPDATE").
 		Set("open = EXCLUDED.open").
@@ -32,7 +32,7 @@ func (r *CandlestickRepository) SaveCandlestick(candlestick *candlestick.Candles
 	return errors.Wrap(err, "SaveCandlestick failed")
 }
 
-func (r *CandlestickRepository) GetCandlesticks(quote *quote.Quote, interval candlestick.Interval, from, to time.Time) ([]candlestick.Candlestick, error) {
+func (r CandlestickRepository) GetCandlesticks(quote *quote.Quote, interval candlestick.Interval, from, to time.Time) ([]candlestick.Candlestick, error) {
 	var candlesticks []candlestick.Candlestick
 
 	err := r.db.Model(&candlestick.Candlestick{}).
@@ -48,4 +48,28 @@ func (r *CandlestickRepository) GetCandlesticks(quote *quote.Quote, interval can
 	}
 
 	return candlesticks, nil
+}
+
+func (r CandlestickRepository) GetLastCandlestickTimestamp(quote *quote.Quote, interval candlestick.Interval) (time.Time, error) {
+	var toReturn struct {
+		Timestamp time.Time
+	}
+
+	err := r.db.Model().
+		ColumnExpr("timestamp").
+		TableExpr("candlesticks").
+		Where("quote_id = ?", quote.ID).
+		Where("interval = ?", interval).
+		Order("timestamp ASC").
+		Limit(1).
+		Select(&toReturn)
+
+	if err != nil {
+		if err == pg.ErrNoRows {
+			return time.Now(), nil
+		}
+		return time.Now(), errors.Wrap(err, "GetLastCandlestickTimestamp failed")
+	}
+
+	return toReturn.Timestamp, nil
 }

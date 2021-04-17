@@ -1,0 +1,22 @@
+CREATE UNIQUE INDEX quotes_symbol ON quotes(symbol);
+insert into quotes(symbol, name)
+values ('JPM', 'JPMorgan Chase & Co.'),
+       ('V', 'Visa Inc.'),
+       ('JNJ', 'Johnson & Johnson'),
+       ('BAC', 'Bank of America Corporation'),
+       ('WMT', 'Walmart Inc.'),
+       ('DIS', 'The Walt Disney Company'),
+       ('NVDA', 'NVIDIA Corporation'),
+       ('PG', 'The Procter & Gamble Company'),
+       ('PYPL', 'PayPal Holdings, Inc.'),
+       ('CMCSA', 'Comcast Corporation'),
+       ('CSCO', 'Cisco Systems, Inc.'),
+       ('NKE', 'NIKE, Inc.'),
+       ('CVX', 'Chevron Corporation'),
+       ('PFE', 'Pfizer Inc.'),
+       ('CRM', 'salesforce.com, inc.'),
+       ('MRK', 'Merck & Co., Inc.'),
+       ('WFC', 'Wells Fargo & Company'),
+       ('C', 'Citigroup Inc.'),
+       ('PDD', 'Pinduoduo Inc.'),
+       ('MDT', 'Medtronic plc');

@@ -10,6 +10,7 @@ type Quote struct {
 type Status string
 
 const (
-	StatusNew   Status = "new"
-	StatusReady Status = "ready"
+	StatusNew       Status = "new"
+	StatusReady     Status = "ready"
+	StatusSuspended Status = "suspended"
 )

@@ -15,10 +15,10 @@ func NewQuoteRepository(db *pg.DB) *QuoteRepository {
 	return &QuoteRepository{db}
 }
 
-func (r QuoteRepository) GetQuotes() ([]quote.Quote, error) {
+func (r QuoteRepository) GetQuotes(status quote.Status) ([]quote.Quote, error) {
 	var quotes []quote.Quote
 
-	err := r.db.Model(&quote.Quote{}).Select(&quotes)
+	err := r.db.Model(&quote.Quote{}).Where("status = ?", status).Select(&quotes)
 
 	if err != nil && err != pg.ErrNoRows {
 		return nil, errors.Wrap(err, "GetQuotes failed")

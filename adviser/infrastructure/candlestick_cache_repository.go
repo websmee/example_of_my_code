@@ -83,3 +83,14 @@ func (r *candlestickCacheRepository) GetCandlesticks(_ context.Context, symbol s
 
 	return c, nil
 }
+
+func (r *candlestickCacheRepository) GetCandlesticksByCount(
+	ctx context.Context,
+	symbol string,
+	interval candlestick.Interval,
+	start time.Time,
+	direction candlestick.GetterDirection,
+	count int,
+) ([]candlestick.Candlestick, error) {
+	return candlestick.NewGreedyGetter(r).GetCandlesticksByCount(ctx, symbol, interval, start, direction, count)
+}

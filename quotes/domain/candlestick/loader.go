@@ -7,5 +7,6 @@ import (
 )
 
 type Loader interface {
-	LoadCandlesticks(quote quote.Quote, start, end time.Time, interval Interval) ([]Candlestick, error)
+	LoadHistory(quote quote.Quote, start, end time.Time, interval Interval) ([]Candlestick, error)
+	LoadLatest(quote quote.Quote, interval Interval) ([]Candlestick, error)
 }

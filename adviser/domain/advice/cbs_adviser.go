@@ -7,22 +7,19 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/websmee/example_of_my_code/adviser/domain/candlestick"
-	"github.com/websmee/example_of_my_code/adviser/domain/params"
 )
 
 const (
-	_ NoAdviceReason = iota
-	CBSOk
-	CBSCalmPeriodTooVolatile
-	CBSTooSteepCalmLine
-	CBSStormTooWeak
-	CBSStormTooStrong
-	CBSStormTooSmall
-	CBSWrongDirection
-	CBSSystemError
+	StatusCBSCalmPeriodIsUnstable Status = "CBSCalmPeriodIsUnstable"
+	StatusCBSCalmPeriodTooShort   Status = "CBSCalmPeriodTooShort"
+	StatusCBSTooSteepCalmLine     Status = "CBSTooSteepCalmLine"
+	StatusCBSStormPeriodTooShort  Status = "CBSStormPeriodTooShort"
+	StatusCBSStormTooWeak         Status = "CBSStormTooWeak"
+	StatusCBSStormTooStrong       Status = "CBSStormTooStrong"
+	StatusCBSStormTooSmall        Status = "CBSStormTooSmall"
+	StatusCBSStormIsUnstable      Status = "CBSStormIsUnstable"
+	StatusCBSWrongDirection       Status = "CBSWrongDirection"
 )
-
-const cbsExpirationHoursCoeff = 3
 
 type cbsAdviser struct {
 	repository candlestick.Repository
@@ -36,25 +33,47 @@ func NewCBSAdviser(repository candlestick.Repository, calc candlestick.Calculato
 	}
 }
 
-func (r cbsAdviser) GetAdvice(
+func (r cbsAdviser) GetAdvices(
 	ctx context.Context,
 	adviserParams []decimal.Decimal,
 	current candlestick.Candlestick,
 	quoteSymbol string,
-) (*Advice, NoAdviceReason, error) {
-	cbsParams := new(params.CBS)
+) ([]InternalAdvice, error) {
+	cbsParams := new(CBSParams)
 	cbsParams.SetParams(adviserParams)
 
-	reason, direction, err := r.checkStorm(ctx, cbsParams, current, quoteSymbol)
-	if reason != CBSOk {
-		return nil, reason, err
+	advices := []InternalAdvice{{
+		Status:        StatusOK,
+		QuoteSymbol:   quoteSymbol,
+		HoursBefore:   cbsParams.CalmDurationHours + cbsParams.StormDurationHours,
+		HoursAfter:    cbsParams.StormDurationHours,
+		Timestamp:     current.Timestamp,
+		CurrentPrice:  current.Close,
+		TakeProfit:    decimal.NewFromInt(0),
+		StopLoss:      decimal.NewFromInt(0),
+		Leverage:      DefaultLeverage,
+		OrderResult:   candlestick.OrderResultNone,
+		AdviserType:   AdviserTypeCBS,
+		AdviserParams: adviserParams,
+	}}
+
+	status, direction, err := r.checkStorm(ctx, cbsParams, current, quoteSymbol)
+	if err != nil {
+		return nil, err
+	}
+	if status != StatusOK {
+		advices[0].Status = status
+		return advices, err
 	}
 
-	if reason, err := r.checkCalm(ctx, cbsParams, current, quoteSymbol); reason != CBSOk {
-		return nil, reason, err
+	status, err = r.checkCalm(ctx, cbsParams, current, quoteSymbol)
+	if err != nil {
+		return nil, err
 	}
-
-	expiration := current.Timestamp.Add(time.Duration(cbsParams.CalmDurationHours+cbsParams.StormDurationHours) * cbsExpirationHoursCoeff * time.Hour)
+	if status != StatusOK {
+		advices[0].Status = status
+		return advices, err
+	}
 
 	var tp, sl decimal.Decimal
 	if direction > 0 {
@@ -65,135 +84,127 @@ func (r cbsAdviser) GetAdvice(
 		sl = current.Close.Add(cbsParams.StopLossDiff)
 	}
 
-	if reason, err := r.checkDirection(ctx, cbsParams, current, quoteSymbol, direction); reason != CBSOk {
-		return nil, reason, err
+	status, err = r.checkDirection(ctx, cbsParams, current, quoteSymbol, direction)
+	if err != nil {
+		return nil, err
+	}
+	if status != StatusOK {
+		advices[0].Status = status
+		return advices, err
 	}
 
-	return &Advice{
-		TakeProfit: tp,
-		StopLoss:   sl,
-		Expiration: expiration,
-	}, CBSOk, nil
-}
+	advices[0].TakeProfit = tp
+	advices[0].StopLoss = sl
 
-func (r cbsAdviser) GetReasonName(reason NoAdviceReason) string {
-	switch reason {
-	case CBSOk:
-		return "CBSOk"
-	case CBSCalmPeriodTooVolatile:
-		return "CBSCalmPeriodTooVolatile"
-	case CBSTooSteepCalmLine:
-		return "CBSTooSteepCalmLine"
-	case CBSStormTooWeak:
-		return "CBSStormTooWeak"
-	case CBSStormTooStrong:
-		return "CBSStormTooStrong"
-	case CBSStormTooSmall:
-		return "CBSStormTooSmall"
-	case CBSWrongDirection:
-		return "CBSWrongDirection"
-	case CBSSystemError:
-		return "CBSSystemError"
-	default:
-		return "CBSUnknown"
-	}
+	return advices, nil
 }
 
 func (r cbsAdviser) checkCalm(
 	ctx context.Context,
-	cbsParams *params.CBS,
+	cbsParams *CBSParams,
 	current candlestick.Candlestick,
 	quoteSymbol string,
-) (NoAdviceReason, error) {
-	calm, err := r.repository.GetCandlesticks(
+) (Status, error) {
+	calm, err := r.repository.GetCandlesticksByCount(
 		ctx,
 		quoteSymbol,
 		candlestick.IntervalHour,
-		current.Timestamp.Add(-time.Duration(cbsParams.CalmDurationHours+cbsParams.StormDurationHours)*time.Hour),
 		current.Timestamp.Add(-time.Duration(cbsParams.StormDurationHours)*time.Hour),
+		candlestick.GetterDirectionBackward,
+		cbsParams.CalmDurationHours,
 	)
 	if err != nil {
-		return CBSSystemError, err
+		return "", err
 	}
 
-	if r.calc.CalculateVolatility(calm).GreaterThan(cbsParams.CalmMaxVolatility) {
-		return CBSCalmPeriodTooVolatile, nil
+	if len(calm) < cbsParams.CalmDurationHours {
+		return StatusCBSCalmPeriodTooShort, nil
 	}
 
-	if len(calm) == 0 {
-		return CBSTooSteepCalmLine, nil
+	if r.calc.CalculateMaxChange(calm).GreaterThan(cbsParams.CalmMaxChange) {
+		return StatusCBSCalmPeriodIsUnstable, nil
 	}
 
 	if calm[0].Open.Sub(calm[len(calm)-1].Close).Abs().GreaterThan(cbsParams.CalmMaxCurvature) {
-		return CBSTooSteepCalmLine, nil
+		return StatusCBSTooSteepCalmLine, nil
 	}
 
-	return CBSOk, nil
+	return StatusOK, nil
 }
 
 func (r cbsAdviser) checkStorm(
 	ctx context.Context,
-	cbsParams *params.CBS,
+	cbsParams *CBSParams,
 	current candlestick.Candlestick,
 	quoteSymbol string,
-) (NoAdviceReason, int64, error) {
-	storm, err := r.repository.GetCandlesticks(
+) (Status, int, error) {
+	storm, err := r.repository.GetCandlesticksByCount(
 		ctx,
 		quoteSymbol,
 		candlestick.IntervalHour,
-		current.Timestamp.Add(-time.Duration(cbsParams.StormDurationHours)*time.Hour),
 		current.Timestamp,
+		candlestick.GetterDirectionBackward,
+		cbsParams.StormDurationHours,
 	)
 	if err != nil {
-		return CBSSystemError, 0, err
+		return "", 0, err
+	}
+
+	if len(storm) < cbsParams.StormDurationHours {
+		return StatusCBSStormPeriodTooShort, 0, nil
 	}
 
 	stormPower := storm[0].Open.Sub(storm[len(storm)-1].Close).Abs()
 
 	if stormPower.LessThan(cbsParams.StormMinPower) {
-		return CBSStormTooWeak, 0, nil
+		return StatusCBSStormTooWeak, 0, nil
 	}
 
 	if stormPower.GreaterThan(cbsParams.StormMaxPower) {
-		return CBSStormTooStrong, 0, nil
+		return StatusCBSStormTooStrong, 0, nil
 	}
 
 	stormVolume := r.calc.CalculateVolume(storm)
 	if stormVolume.LessThan(cbsParams.StormMinVolume) {
-		return CBSStormTooSmall, 0, nil
+		return StatusCBSStormTooSmall, 0, nil
 	}
 
-	var direction int64 = 1 // up
+	direction := 1 // up
 	if storm[0].Open.GreaterThan(current.Close) {
 		direction = -1 // down
 	}
 
-	return CBSOk, direction, nil
+	if !r.calc.CalculateIsRising(storm, cbsParams.StormDurationHours/5+1, direction) {
+		return StatusCBSStormIsUnstable, 0, nil
+	}
+
+	return StatusOK, direction, nil
 }
 
 func (r cbsAdviser) checkDirection(
 	ctx context.Context,
-	cbsParams *params.CBS,
+	cbsParams *CBSParams,
 	current candlestick.Candlestick,
 	quoteSymbol string,
-	direction int64,
-) (NoAdviceReason, error) {
-	directionPeriod, err := r.repository.GetCandlesticks(
+	direction int,
+) (Status, error) {
+	directionPeriod, err := r.repository.GetCandlesticksByCount(
 		ctx,
 		quoteSymbol,
 		candlestick.IntervalHour,
-		current.Timestamp.Add(-time.Duration(cbsParams.CheckDirectionHours)*24*time.Hour),
 		current.Timestamp,
+		candlestick.GetterDirectionBackward,
+		cbsParams.CheckDirectionHours,
 	)
 	if err != nil {
-		return CBSSystemError, err
+		return "", err
 	}
 
 	sma := r.calc.CalculateSMA(directionPeriod)
 	if (sma.Sub(current.Close).GreaterThan(cbsParams.CheckDirectionDiff) && direction < 0) ||
 		(sma.Sub(current.Close).LessThan(cbsParams.CheckDirectionDiff.Neg()) && direction > 0) {
-		return CBSWrongDirection, nil
+		return StatusCBSWrongDirection, nil
 	}
 
-	return CBSOk, nil
+	return StatusOK, nil
 }

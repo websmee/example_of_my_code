@@ -9,4 +9,5 @@ import (
 type Repository interface {
 	SaveCandlestick(candlestick *Candlestick) error
 	GetCandlesticks(quote *quote.Quote, interval Interval, from, to time.Time) ([]Candlestick, error)
+	GetLastCandlestickTimestamp(quote *quote.Quote, interval Interval) (time.Time, error)
 }

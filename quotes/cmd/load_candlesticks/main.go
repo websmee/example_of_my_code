@@ -5,15 +5,16 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-kit/kit/log"
 	"github.com/go-pg/pg/v9"
 	"github.com/websmee/ms/pkg/cmd"
 	"github.com/websmee/ms/pkg/errors"
 
 	"github.com/websmee/example_of_my_code/quotes/app"
+	"github.com/websmee/example_of_my_code/quotes/cmd/dependencies"
 	"github.com/websmee/example_of_my_code/quotes/infrastructure"
 	"github.com/websmee/example_of_my_code/quotes/infrastructure/config"
 	"github.com/websmee/example_of_my_code/quotes/infrastructure/persistence"
+	"github.com/websmee/example_of_my_code/quotes/infrastructure/tiingo"
 )
 
 func main() {
@@ -24,7 +25,7 @@ func main() {
 }
 
 func run() error {
-	fs := flag.NewFlagSet("quotes", flag.ExitOnError)
+	fs := flag.NewFlagSet("load_candlesticks", flag.ExitOnError)
 	var (
 		consulAddr       = fs.String("consul.addr", "127.0.0.1", "consul address")
 		consulPort       = fs.String("consul.port", "8500", "consul port")
@@ -35,18 +36,13 @@ func run() error {
 
 	// LOGGER
 
-	var logger log.Logger
-	{
-		logger = log.NewLogfmtLogger(os.Stderr)
-		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-		logger = log.With(logger, "caller", log.DefaultCaller)
-	}
+	logger := dependencies.GetLogger()
 
 	// CONFIG
 
 	var (
-		dbConfig           *config.DB
-		alphaVantageConfig *config.AlphaVantage
+		dbConfig     *config.DB
+		tiingoConfig *config.Tiingo
 	)
 	{
 		cfg, err := config.NewConsulKVConfig(*consulAddr+":"+*consulPort, logger)
@@ -61,9 +57,9 @@ func run() error {
 			return err
 		}
 
-		alphaVantageConfig, err = cfg.GetAlphaVantage()
+		tiingoConfig, err = cfg.GetTiingo()
 		if err != nil {
-			_ = logger.Log("config", "apikey", "error", err, "stack", errors.GetStackTrace(err))
+			_ = logger.Log("config", "tiingo", "error", err, "stack", errors.GetStackTrace(err))
 			return err
 		}
 	}
@@ -89,7 +85,8 @@ func run() error {
 	// INIT
 
 	loader := app.NewCandlestickLoader(
-		infrastructure.NewCandlestickAlphaVantageLoader(alphaVantageConfig),
+		logger,
+		infrastructure.NewTiingoCandlestickLoader(tiingo.NewClient(tiingoConfig)),
 		persistence.NewCandlestickRepository(db),
 		persistence.NewQuoteRepository(db),
 	)
@@ -97,7 +94,7 @@ func run() error {
 	// RUN
 
 	if err := loader.LoadCandlesticks(); err != nil {
-		_ = logger.Log("run", "nnApp", "error", err, "stack", errors.GetStackTrace(err))
+		_ = logger.Log("run", "loaderApp", "error", err, "stack", errors.GetStackTrace(err))
 		return err
 	}
 

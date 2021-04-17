@@ -29,16 +29,14 @@ func main() {
 }
 
 func run() error {
-	fs := flag.NewFlagSet("quotes", flag.ExitOnError)
+	fs := flag.NewFlagSet("optimize_params", flag.ExitOnError)
 	var (
-		//algorithmType     = fs.String("algorithm", "CBS", "algorithm type")
-		quote        = fs.String("quote", "AAPL", "quote symbol")
-		paramsName   = fs.String("params.name", "CBSR_AAPL", "name of the params")
+		paramsName   = fs.String("params.name", "CBS", "name of the params")
 		paramsPath   = fs.String("params.path", "./files/params/", "path to get/save params")
-		periodFrom   = fs.String("optimizer.periodFrom", "2020-11-01T00:00:00Z", "optimizing params for this period")
-		periodTo     = fs.String("optimizer.periodTo", "2021-02-01T00:00:00Z", "optimizing params for this period")
-		modifyRate   = fs.Float64("optimizer.modifyRate", 0.5, "params change rate (bigger means faster but less detailed)")
-		minFrequency = fs.Float64("optimizer.minFrequency", 10, "minimal advice frequency (%) required for the period")
+		periodFrom   = fs.String("optimizer.periodFrom", "2021-01-01T00:00:00Z", "optimizing params for this period")
+		periodTo     = fs.String("optimizer.periodTo", "2021-04-01T00:00:00Z", "optimizing params for this period")
+		modifyRate   = fs.Float64("optimizer.modifyRate", 1, "params change rate (bigger means faster but less detailed)")
+		minFrequency = fs.Float64("optimizer.minFrequency", 3, "minimal advice frequency (%) required for the period")
 		quotesAddr   = fs.String("quotes.addr", "", "use this addr instead of consul discovery")
 		consulAddr   = fs.String("consul.addr", "127.0.0.1", "consul address")
 		consulPort   = fs.String("consul.port", "8500", "consul port")
@@ -105,7 +103,7 @@ func run() error {
 			return err
 		}
 		paramsRepository := infrastructure.NewParamsFileRepository(*paramsPath)
-		optimizerApp = app.NewCBSROptimizerApp(candlestickCacheRepository, paramsRepository, *modifyRate)
+		optimizerApp = app.NewCBSScaledOptimizerApp(quoteRepository, candlestickCacheRepository, paramsRepository, *modifyRate)
 	}
 
 	// RUN
@@ -120,7 +118,6 @@ func run() error {
 	if err := optimizerApp.OptimizeParams(
 		ctx,
 		*paramsName,
-		*quote,
 		from,
 		to,
 		*minFrequency,

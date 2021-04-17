@@ -7,20 +7,14 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/websmee/example_of_my_code/adviser/domain/candlestick"
-	"github.com/websmee/example_of_my_code/adviser/domain/params"
 )
 
 const (
-	_ NoAdviceReason = iota
-	FTOk
-	FTTrendTooVolatile
-	FTTrendTooStrong
-	FTTrendTooWeak
-	FTTrendWrongDirection
-	FTSystemError
+	StatusFTTrendTooVolatile    Status = "FTTrendTooVolatile"
+	StatusFTTrendTooStrong      Status = "FTTrendTooStrong"
+	StatusFTTrendTooWeak        Status = "FTTrendTooWeak"
+	StatusFTTrendWrongDirection Status = "FTTrendWrongDirection"
 )
-
-const ftExpirationHours = 72
 
 type ftAdviser struct {
 	repository candlestick.Repository
@@ -34,27 +28,38 @@ func NewFTAdviser(repository candlestick.Repository, calc candlestick.Calculator
 	}
 }
 
-func (r ftAdviser) GetAdvice(
+func (r ftAdviser) GetAdvices(
 	ctx context.Context,
 	adviserParams []decimal.Decimal,
 	current candlestick.Candlestick,
 	quoteSymbol string,
-) (*Advice, NoAdviceReason, error) {
-	ftParams := new(params.FT)
+) ([]InternalAdvice, error) {
+	ftParams := new(FTParams)
 	ftParams.SetParams(adviserParams)
 
-	var (
-		reason         NoAdviceReason
-		err            error
-		trendDirection int64
-	)
+	advices := []InternalAdvice{{
+		Status:        StatusOK,
+		QuoteSymbol:   quoteSymbol,
+		HoursBefore:   ftParams.TrendDurationHours,
+		HoursAfter:    ftParams.TrendDurationHours,
+		Timestamp:     current.Timestamp,
+		CurrentPrice:  current.Close,
+		TakeProfit:    decimal.NewFromInt(0),
+		StopLoss:      decimal.NewFromInt(0),
+		Leverage:      DefaultLeverage,
+		OrderResult:   candlestick.OrderResultNone,
+		AdviserType:   AdviserTypeFT,
+		AdviserParams: adviserParams,
+	}}
 
-	reason, trendDirection, err = r.checkTrend(ctx, ftParams, current, quoteSymbol)
-	if reason != FTOk {
-		return nil, reason, err
+	status, trendDirection, err := r.checkTrend(ctx, ftParams, current, quoteSymbol)
+	if err != nil {
+		return nil, err
 	}
-
-	expiration := current.Timestamp.Add(ftExpirationHours * time.Hour)
+	if status != StatusOK {
+		advices[0].Status = status
+		return advices, err
+	}
 
 	var tp, sl decimal.Decimal
 	if trendDirection > 0 {
@@ -65,42 +70,27 @@ func (r ftAdviser) GetAdvice(
 		sl = current.Close.Add(ftParams.StopLossDiff)
 	}
 
-	if reason, err := r.checkDirection(ctx, ftParams, current, quoteSymbol, trendDirection); reason != FTOk {
-		return nil, reason, err
+	status, err = r.checkDirection(ctx, ftParams, current, quoteSymbol, trendDirection)
+	if err != nil {
+		return nil, err
+	}
+	if status != StatusOK {
+		advices[0].Status = status
+		return advices, err
 	}
 
-	return &Advice{
-		TakeProfit: tp,
-		StopLoss:   sl,
-		Expiration: expiration,
-	}, FTOk, nil
-}
+	advices[0].TakeProfit = tp
+	advices[0].StopLoss = sl
 
-func (r ftAdviser) GetReasonName(reason NoAdviceReason) string {
-	switch reason {
-	case FTOk:
-		return "FTOk"
-	case FTTrendTooVolatile:
-		return "FTTrendTooVolatile"
-	case FTTrendTooStrong:
-		return "FTTrendTooStrong"
-	case FTTrendTooWeak:
-		return "FTTrendTooWeak"
-	case FTTrendWrongDirection:
-		return "FTTrendWrongDirection"
-	case FTSystemError:
-		return "FTSystemError"
-	default:
-		return "FTUnknown"
-	}
+	return advices, nil
 }
 
 func (r ftAdviser) checkTrend(
 	ctx context.Context,
-	ftParams *params.FT,
+	ftParams *FTParams,
 	current candlestick.Candlestick,
 	quoteSymbol string,
-) (NoAdviceReason, int64, error) {
+) (Status, int64, error) {
 	trend, err := r.repository.GetCandlesticks(
 		ctx,
 		quoteSymbol,
@@ -109,19 +99,19 @@ func (r ftAdviser) checkTrend(
 		current.Timestamp,
 	)
 	if err != nil {
-		return FTSystemError, 0, err
+		return "", 0, err
 	}
 
 	if r.calc.CalculateVolatility(trend).GreaterThan(ftParams.TrendMaxVolatility) {
-		return FTTrendTooVolatile, 0, nil
+		return StatusFTTrendTooVolatile, 0, nil
 	}
 
 	if current.Close.Sub(trend[0].Open).Abs().GreaterThan(ftParams.TrendMaxCurvature) {
-		return FTTrendTooStrong, 0, nil
+		return StatusFTTrendTooStrong, 0, nil
 	}
 
 	if current.Close.Sub(trend[0].Open).Abs().LessThan(ftParams.TrendMinCurvature) {
-		return FTTrendTooWeak, 0, nil
+		return StatusFTTrendTooWeak, 0, nil
 	}
 
 	var direction int64 = 1 // up
@@ -129,16 +119,16 @@ func (r ftAdviser) checkTrend(
 		direction = -1 // down
 	}
 
-	return FTOk, direction, nil
+	return StatusOK, direction, nil
 }
 
 func (r ftAdviser) checkDirection(
 	ctx context.Context,
-	ftParams *params.FT,
+	ftParams *FTParams,
 	current candlestick.Candlestick,
 	quoteSymbol string,
 	direction int64,
-) (NoAdviceReason, error) {
+) (Status, error) {
 	directionPeriod, err := r.repository.GetCandlesticks(
 		ctx,
 		quoteSymbol,
@@ -147,14 +137,14 @@ func (r ftAdviser) checkDirection(
 		current.Timestamp,
 	)
 	if err != nil {
-		return FTSystemError, err
+		return "", err
 	}
 
 	sma := r.calc.CalculateSMA(directionPeriod)
 	if (sma.Sub(current.Close).GreaterThan(ftParams.CheckDirectionDiff) && direction < 0) ||
 		(sma.Sub(current.Close).LessThan(ftParams.CheckDirectionDiff.Neg()) && direction > 0) {
-		return FTTrendWrongDirection, nil
+		return StatusFTTrendWrongDirection, nil
 	}
 
-	return FTOk, nil
+	return StatusOK, nil
 }

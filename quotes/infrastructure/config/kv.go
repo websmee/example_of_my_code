@@ -9,11 +9,13 @@ import (
 	configKV "github.com/websmee/ms/pkg/config"
 )
 
-const alphaVantageAPIKeyKey = "alpha_vantage"
+const (
+	tiingoKey = "tiingo"
+)
 
 type Config interface {
 	GetDB(key string) (*DB, error)
-	GetAlphaVantage() (*AlphaVantage, error)
+	GetTiingo() (*Tiingo, error)
 }
 
 type consulKVConfig struct {
@@ -33,29 +35,29 @@ func NewConsulKVConfig(consulAddr string, logger log.Logger) (Config, error) {
 func (r *consulKVConfig) GetDB(key string) (*DB, error) {
 	data, err := r.kv.Get(key)
 	if err != nil {
-		return nil, errors.Wrap(err, "GetDB failed get")
+		return nil, errors.Wrap(err, "GetDB config failed get")
 	}
 
 	var db DB
 	err = json.Unmarshal(data, &db)
 	if err != nil {
-		return nil, errors.Wrap(err, "GetDB failed unmarshal")
+		return nil, errors.Wrap(err, "GetDB config failed unmarshal")
 	}
 
 	return &db, nil
 }
 
-func (r *consulKVConfig) GetAlphaVantage() (*AlphaVantage, error) {
-	data, err := r.kv.Get(alphaVantageAPIKeyKey)
+func (r *consulKVConfig) GetTiingo() (*Tiingo, error) {
+	data, err := r.kv.Get(tiingoKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "GetAlphaVantageAPIKey failed get")
+		return nil, errors.Wrap(err, "GetTiingo config failed get")
 	}
 
-	var av AlphaVantage
-	err = json.Unmarshal(data, &av)
+	var t Tiingo
+	err = json.Unmarshal(data, &t)
 	if err != nil {
-		return nil, errors.Wrap(err, "GetAlphaVantageAPIKey failed unmarshal")
+		return nil, errors.Wrap(err, "GetTiingo config failed unmarshal")
 	}
 
-	return &av, nil
+	return &t, nil
 }

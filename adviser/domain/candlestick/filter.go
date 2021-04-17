@@ -24,7 +24,7 @@ func (r basicFilter) GetCandlesticks(ctx context.Context, symbol string, interva
 	result := make([]Candlestick, len(cs))
 	resultIndex := 0
 	for i := range cs {
-		if cs[i].Close.Equals(decimal.NewFromInt(0)) {
+		if cs[i].Close.Equals(decimal.NewFromInt(0)) || cs[i].Volume == 0 {
 			continue
 		}
 		result[resultIndex] = cs[i]
@@ -32,4 +32,15 @@ func (r basicFilter) GetCandlesticks(ctx context.Context, symbol string, interva
 	}
 
 	return result[:resultIndex], nil
+}
+
+func (r basicFilter) GetCandlesticksByCount(
+	ctx context.Context,
+	symbol string,
+	interval Interval,
+	start time.Time,
+	direction GetterDirection,
+	count int,
+) ([]Candlestick, error) {
+	return NewGreedyGetter(r).GetCandlesticksByCount(ctx, symbol, interval, start, direction, count)
 }

@@ -27,7 +27,7 @@ func TestCalculator_CalculateVolatility(t *testing.T) {
 		Low:   decimal.NewFromInt(12),
 	})
 
-	calc := DefaultCalculator()
+	calc := NewDefaultCalculator()
 	volatility := calc.CalculateVolatility(candlesticks)
 	expected := decimal.NewFromFloat(2.943920288775949)
 	if !volatility.Equals(expected) {
@@ -56,65 +56,53 @@ func TestCalculator_CalculateResults(t *testing.T) {
 		Low:   decimal.NewFromInt(12),
 	})
 
-	calc := DefaultCalculator()
+	calc := NewDefaultCalculator()
 
 	{
 		// BUY TAKE PROFIT
 		currentPrice := decimal.NewFromInt(3)
-		takeProfitPriceDiff := decimal.NewFromInt(4)
-		stopLossPriceDiff := takeProfitPriceDiff.Mul(decimal.NewFromFloat(0.3))
+		takeProfitPrice := decimal.NewFromInt(7)
+		stopLossPrice := decimal.NewFromInt(1)
 		expirationPeriod := candlesticks
-		r, h := calc.CalculateOrderResult(currentPrice, takeProfitPriceDiff, stopLossPriceDiff, expirationPeriod)
-		if r != OrderResultProfitBuy {
+		r, _ := calc.CalculateOrderResult(currentPrice, takeProfitPrice, stopLossPrice, expirationPeriod)
+		if r != OrderResultTakeProfit {
 			t.Error(r)
-		}
-		if !h.Equals(decimal.NewFromInt(2)) {
-			t.Error(h)
 		}
 	}
 
 	{
 		// SELL TAKE PROFIT
 		currentPrice := decimal.NewFromInt(6)
-		takeProfitPriceDiff := decimal.NewFromInt(1)
-		stopLossPriceDiff := takeProfitPriceDiff.Mul(decimal.NewFromFloat(0.3))
+		takeProfitPrice := decimal.NewFromInt(5)
+		stopLossPrice := decimal.NewFromInt(7)
 		expirationPeriod := candlesticks
-		r, h := calc.CalculateOrderResult(currentPrice, takeProfitPriceDiff, stopLossPriceDiff, expirationPeriod)
-		if r != OrderResultProfitSell {
+		r, _ := calc.CalculateOrderResult(currentPrice, takeProfitPrice, stopLossPrice, expirationPeriod)
+		if r != OrderResultTakeProfit {
 			t.Error(r)
-		}
-		if !h.Equals(decimal.NewFromInt(1)) {
-			t.Error(h)
 		}
 	}
 
 	{
 		// EXPIRED
 		currentPrice := decimal.NewFromInt(6)
-		takeProfitPriceDiff := decimal.NewFromInt(5)
-		stopLossPriceDiff := takeProfitPriceDiff.Mul(decimal.NewFromFloat(0.3))
+		takeProfitPrice := decimal.NewFromInt(11)
+		stopLossPrice := decimal.NewFromInt(4)
 		expirationPeriod := candlesticks[:1]
-		r, h := calc.CalculateOrderResult(currentPrice, takeProfitPriceDiff, stopLossPriceDiff, expirationPeriod)
+		r, _ := calc.CalculateOrderResult(currentPrice, takeProfitPrice, stopLossPrice, expirationPeriod)
 		if r != OrderResultExpired {
 			t.Error(r)
-		}
-		if !h.Equals(decimal.NewFromInt(1)) {
-			t.Error(h)
 		}
 	}
 
 	{
 		// STOP LOSS
 		currentPrice := decimal.NewFromInt(8)
-		takeProfitPriceDiff := decimal.NewFromInt(6)
-		stopLossPriceDiff := takeProfitPriceDiff.Mul(decimal.NewFromFloat(0.3))
+		takeProfitPrice := decimal.NewFromInt(14)
+		stopLossPrice := decimal.NewFromInt(7)
 		expirationPeriod := candlesticks
-		r, h := calc.CalculateOrderResult(currentPrice, takeProfitPriceDiff, stopLossPriceDiff, expirationPeriod)
+		r, _ := calc.CalculateOrderResult(currentPrice, takeProfitPrice, stopLossPrice, expirationPeriod)
 		if r != OrderResultStopLoss {
 			t.Error(r)
-		}
-		if !h.Equals(decimal.NewFromInt(3)) {
-			t.Error(h)
 		}
 	}
 }

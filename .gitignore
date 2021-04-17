@@ -1,9 +1,1 @@
 .idea
-*.exe
-quotes_load_candlesticks
-quotes_app
-adviser_create_datasets
-adviser_optimize_params
-adviser_test_params
-adviser_train_nn
-adviser_test_nn

@@ -18,6 +18,7 @@ import (
 	"github.com/websmee/example_of_my_code/adviser/app"
 	"github.com/websmee/example_of_my_code/adviser/cmd/dependencies"
 	"github.com/websmee/example_of_my_code/adviser/domain/candlestick"
+	"github.com/websmee/example_of_my_code/adviser/domain/params"
 	"github.com/websmee/example_of_my_code/adviser/infrastructure"
 	grpcInfra "github.com/websmee/example_of_my_code/adviser/infrastructure/grpc"
 )
@@ -29,12 +30,13 @@ func main() {
 }
 
 func run() error {
-	fs := flag.NewFlagSet("quotes", flag.ExitOnError)
+	fs := flag.NewFlagSet("test_params", flag.ExitOnError)
 	var (
-		paramsName   = fs.String("params.name", "CBSR_test", "name of the params")
-		paramsPath   = fs.String("params.path", "./files/params/", "path to get/save params")
-		periodFrom   = fs.String("tester.periodFrom", "2020-12-01T00:00:00Z", "optimizing params for this period")
-		periodTo     = fs.String("tester.periodTo", "2021-01-01T00:00:00Z", "optimizing params for this period")
+		paramsName   = fs.String("params.name", "CBS_test", "name of the params")
+		paramsPath   = fs.String("params.path", "./files/params/", "path to get params")
+		advicesPath  = fs.String("advices.path", "./files/advices/", "path to save results")
+		periodFrom   = fs.String("tester.periodFrom", "2021-01-01T00:00:00Z", "testing params for this period")
+		periodTo     = fs.String("tester.periodTo", "2021-04-01T00:00:00Z", "testing params for this period")
 		quotesAddr   = fs.String("quotes.addr", "", "use this addr instead of consul discovery")
 		consulAddr   = fs.String("consul.addr", "127.0.0.1", "consul address")
 		consulPort   = fs.String("consul.port", "8500", "consul port")
@@ -93,15 +95,19 @@ func run() error {
 			quoteRepository,
 			infrastructure.NewCandlestickGRPCRepository(quotesApp),
 			[]candlestick.Interval{candlestick.IntervalHour},
-			from,
-			to,
+			from.Add(-params.TestOrderExpirationPeriod), // add extra period for current advice history
+			to.Add(params.TestOrderExpirationPeriod),    // add extra period for expiration
 		)
 		if err != nil {
 			_ = logger.Log("init", "candlestickCacheRepository", "error", err, "stack", errors.GetStackTrace(err))
 			return err
 		}
-		paramsRepository := infrastructure.NewParamsFileRepository(*paramsPath)
-		testerApp = app.NewCBSRTesterApp(quoteRepository, candlestickCacheRepository, paramsRepository)
+		testerApp = app.NewCBSScaledTesterApp(
+			quoteRepository,
+			candlestickCacheRepository,
+			infrastructure.NewParamsFileRepository(*paramsPath),
+			infrastructure.NewAdviceFileRepository(*advicesPath),
+		)
 	}
 
 	// RUN
